@@ -26,10 +26,14 @@ from app.services.google_service import (
     get_or_raise_google_user,
     verify_google_token,
 )
+from app.services.email_verification_service import (
+    create_verification_token,
+    verify_email_token,
+)
 from app.services.password_reset_service import request_password_reset, reset_password
 from app.services.pkce_service import consume_pkce_session, create_pkce_session
 from app.utils.cookies import attach_auth_cookies
-from app.utils.email import send_password_reset_email
+from app.utils.email import send_password_reset_email, send_verification_email
 from database import get_db
 from errors import get_error_code, raise_auth_error
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
@@ -81,6 +85,12 @@ async def _init_core_profile(user: User) -> None:
 async def register_client(data: RegisterRequest, db: Session = Depends(get_db)):
     user = register_user(db, data, "client")
     await _init_core_profile(user)
+    raw_token = create_verification_token(db, user.id)
+    try:
+        send_verification_email(user.email, raw_token, user.full_name)
+    except Exception as exc:
+        logger.error("Failed to send verification email to %s: %s", user.email, exc)
+        raise_auth_error("email_send_failed")
     return user
 
 
@@ -88,7 +98,26 @@ async def register_client(data: RegisterRequest, db: Session = Depends(get_db)):
 async def register_contractor(data: RegisterRequest, db: Session = Depends(get_db)):
     user = register_user(db, data, "contractor")
     await _init_core_profile(user)
+    raw_token = create_verification_token(db, user.id)
+    try:
+        send_verification_email(user.email, raw_token, user.full_name)
+    except Exception as exc:
+        logger.error("Failed to send verification email to %s: %s", user.email, exc)
+        raise_auth_error("email_send_failed")
     return user
+
+
+@router.get("/verify-email")
+def verify_email(token: str, db: Session = Depends(get_db)):
+    try:
+        verify_email_token(db, token)
+        return RedirectResponse(
+            url=f"{CLIENT_ENDPOINT}/login?verified=true", status_code=302
+        )
+    except HTTPException:
+        return RedirectResponse(
+            url=f"{CLIENT_ENDPOINT}/error?error=email_link_expired", status_code=302
+        )
 
 
 @router.post("/login", response_model=LoginResponse)
@@ -215,5 +244,4 @@ def _build_google_url(state: str, challenge: str) -> str:
         "access_type": "offline",
         "prompt": "consent",
     }
-    return f"{GOOGLE_AUTH_ENDPOINT}?{urlencode(params)}"
     return f"{GOOGLE_AUTH_ENDPOINT}?{urlencode(params)}"

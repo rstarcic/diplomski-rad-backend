@@ -16,7 +16,10 @@ AUTH_ERRORS = {
     "google_account_not_registered": {
         "status_code": 404,
         "code": "google_account_not_registered",
-        "message": "This Google account is not registered yet. Please complete registration first.",
+        "message": (
+            "This Google account is not registered yet. "
+            "Please complete registration first."
+        ),
         "field": None,
     },
     "email_already_registered": {
@@ -46,7 +49,9 @@ AUTH_ERRORS = {
     "missing_code_or_state": {
         "status_code": 400,
         "code": "missing_code_or_state",
-        "message": "Google authentication response is incomplete. Please try again.",
+        "message": (
+            "Google authentication response is incomplete. Please try again."
+        ),
         "field": None,
     },
     "token_exchange_failed": {
@@ -101,6 +106,20 @@ AUTH_ERRORS = {
         "status_code": 401,
         "code": "refresh_token_expired",
         "message": "Your session has expired. Please log in again.",
+        "field": None,
+    },
+    "account_not_verified": {
+        "status_code": 403,
+        "code": "account_not_verified",
+        "message": (
+            "Please verify your email address before logging in."
+        ),
+        "field": None,
+    },
+    "email_link_expired": {
+        "status_code": 400,
+        "code": "email_link_expired",
+        "message": "This verification link has expired. Please request a new one.",
         "field": None,
     },
     "reset_token_invalid": {

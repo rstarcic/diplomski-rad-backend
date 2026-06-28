@@ -42,6 +42,9 @@ def authenticate_user(db: Session, data: LoginRequest) -> tuple[User, str, str]:
     ):
         raise_auth_error("invalid_credentials")
 
+    if not user.email_verified:
+        raise_auth_error("account_not_verified")
+
     access_token, refresh_token = create_session(db, user)
     return user, access_token, refresh_token
 
