@@ -1,0 +1,29 @@
+# Virtual environments
+auth-venv/
+core-venv/
+payment-venv/
+*-venv/
+venv/
+.venv/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Environment variables (contain secrets)
+.env
+.env.*
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Settings
+settings.json
