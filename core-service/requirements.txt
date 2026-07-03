@@ -4,5 +4,7 @@ sqlalchemy==2.0.51
 pydantic==2.13.4
 pydantic[email]==2.13.4
 python-dotenv==1.2.2
+python-multipart==0.0.32
 psycopg2-binary==2.9.12
 email-validator==2.3.0
+python-jose==3.5.0

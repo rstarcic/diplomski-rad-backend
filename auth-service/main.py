@@ -2,6 +2,10 @@ import os
 from contextlib import asynccontextmanager
 
 import uvicorn
+from dotenv import load_dotenv
+
+load_dotenv(override=True)
+
 from app.router import router as auth_router
 from database import init_db
 from fastapi import FastAPI

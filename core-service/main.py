@@ -2,11 +2,13 @@ import os
 from contextlib import asynccontextmanager
 
 import uvicorn
+from app.profiles.router import router as profiles_router
+from database import init_db
+from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.database import init_db
-from app.profiles.router import router as profiles_router
+load_dotenv(override=True)
 
 
 def get_allowed_origins() -> list[str]:
@@ -33,4 +35,4 @@ app.add_middleware(
 app.include_router(profiles_router, prefix="/profiles")
 
 if __name__ == "__main__":
-    uvicorn.run("app.main:app", host="localhost", port=8001, reload=True)
+    uvicorn.run("main:app", host="localhost", port=8001, reload=True)

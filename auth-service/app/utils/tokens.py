@@ -1,10 +1,9 @@
 import os
 from datetime import datetime, timedelta, timezone
 
+from app.schemas import TokenPayload
 from errors import raise_auth_error
 from jose import ExpiredSignatureError, JWTError, jwt
-
-from app.schemas import TokenPayload
 
 SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = os.getenv("ALGORITHM", "HS256")

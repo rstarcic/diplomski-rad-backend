@@ -1,12 +1,21 @@
 import os
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from app.dependencies import get_current_user
+from app.profiles.models import Profile
+from app.profiles.schemas import (
+    ProfileCreate,
+    ProfilePageResponse,
+    ProfileResponse,
+)
+from app.profiles.service import (
+    create_profile_if_not_exists,
+    get_my_profile_page,
+    update_my_profile_page_from_request,
+)
+from database import get_db
+from errors import raise_core_error
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from sqlalchemy.orm import Session
-
-from app.database import get_db
-from app.errors import raise_core_error
-from app.profiles.schemas import ProfileCreate, ProfileResponse, ProfileUpdate
-from app.profiles.service import create_profile_if_not_exists, get_profile, update_profile
 
 router = APIRouter()
 
@@ -27,19 +36,32 @@ def init_profile(
     return create_profile_if_not_exists(db, data)
 
 
-@router.get("/{user_id}", response_model=ProfileResponse)
-def get_profile_endpoint(user_id: int, db: Session = Depends(get_db)):
-    profile = get_profile(db, user_id)
-    if not profile:
-        raise_core_error("profile_not_found")
-    return profile
-
-
-@router.patch("/{user_id}", response_model=ProfileResponse)
-def update_profile_endpoint(
-    user_id: int, data: ProfileUpdate, db: Session = Depends(get_db)
+@router.get("/me", response_model=ProfilePageResponse)
+def get_my_profile_page_endpoint(
+    db: Session = Depends(get_db),
+    current_user: Profile = Depends(get_current_user),
 ):
-    profile = update_profile(db, user_id, data)
-    if not profile:
+    profile_page = get_my_profile_page(db, current_user.user_id)
+
+    if not profile_page:
         raise_core_error("profile_not_found")
-    return profile
+
+    return profile_page
+
+
+@router.put("/me", response_model=ProfilePageResponse)
+async def update_my_profile_page_endpoint(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: Profile = Depends(get_current_user),
+):
+    profile_page = await update_my_profile_page_from_request(
+        db=db,
+        user_id=current_user.user_id,
+        request=request,
+    )
+
+    if profile_page is None:
+        raise_core_error("profile_not_found")
+
+    return profile_page

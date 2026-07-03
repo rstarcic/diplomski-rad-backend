@@ -1,7 +1,7 @@
 import os
 
 from dotenv import load_dotenv
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 load_dotenv()
@@ -35,3 +35,16 @@ def get_db():
 
 def init_db():
     Base.metadata.create_all(bind=engine)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "ALTER TABLE profiles "
+                "ADD COLUMN IF NOT EXISTS profile_picture_blob BYTEA"
+            )
+        )
+        connection.execute(
+            text(
+                "ALTER TABLE profiles "
+                "ADD COLUMN IF NOT EXISTS profile_picture_content_type VARCHAR(100)"
+            )
+        )
