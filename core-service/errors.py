@@ -1,6 +1,30 @@
 from fastapi import HTTPException
 
 CORE_ERRORS = {
+    "only_clients_can_update_jobs": {
+        "status_code": 403,
+        "code": "only_clients_can_update_jobs",
+        "message": "Only clients can update jobs.",
+        "field": None,
+    },
+    "job_not_found": {
+        "status_code": 404,
+        "code": "job_not_found",
+        "message": "We couldn't find the job you're looking for.",
+        "field": None,
+    },
+    "job_failed_to_create": {
+        "status_code": 500,
+        "code": "job_failed_to_create",
+        "message": "Failed to create the job. Please try again later.",
+        "field": None,
+    },
+    "job_cannot_be_updated": {
+        "status_code": 409,
+        "code": "job_cannot_be_updated",
+        "message": "Only open jobs can be updated.",
+        "field": "status",
+    },
     "profile_picture_invalid_type": {
         "status_code": 422,
         "code": "profile_picture_invalid_type",

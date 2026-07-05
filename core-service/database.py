@@ -48,3 +48,13 @@ def init_db():
                 "ADD COLUMN IF NOT EXISTS profile_picture_content_type VARCHAR(100)"
             )
         )
+        connection.execute(
+            text("ALTER TABLE jobs DROP CONSTRAINT IF EXISTS ck_jobs_location_type")
+        )
+        connection.execute(
+            text(
+                "ALTER TABLE jobs "
+                "ADD CONSTRAINT ck_jobs_location_type "
+                "CHECK (location_type IN ('on_site', 'hybrid', 'remote'))"
+            )
+        )
