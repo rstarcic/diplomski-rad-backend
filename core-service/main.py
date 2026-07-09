@@ -2,7 +2,9 @@ import os
 from contextlib import asynccontextmanager
 
 import uvicorn
+from app.applications.router import router as applications_router
 from app.jobs.router import router as jobs_router
+from app.negotiations.router import router as negotiations_router
 from app.profiles.router import router as profiles_router
 from database import init_db
 from dotenv import load_dotenv
@@ -35,6 +37,8 @@ app.add_middleware(
 
 app.include_router(profiles_router, prefix="/profiles")
 app.include_router(jobs_router, prefix="/jobs")
+app.include_router(applications_router)
+app.include_router(negotiations_router, prefix="/negotiations")
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="localhost", port=8001, reload=True)
