@@ -3,15 +3,17 @@ import os
 from app.dependencies import get_current_user
 from app.profiles.models import Profile
 from app.profiles.schemas import (
+    ContractorPublicProfileResponse,
     ProfileCreate,
     ProfilePageResponse,
     ProfileResponse,
 )
-from app.profiles.service import (
+from app.profiles.services.profile_service import (
     create_profile_if_not_exists,
     get_my_profile_page,
     update_my_profile_page_from_request,
 )
+from app.profiles.services.public_profile_service import get_contractor_public_profile
 from database import get_db
 from errors import raise_core_error
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
@@ -43,7 +45,7 @@ def get_my_profile_page_endpoint(
 ):
     profile_page = get_my_profile_page(db, current_user.user_id)
 
-    if not profile_page:
+    if profile_page is None:
         raise_core_error("profile_not_found")
 
     return profile_page
@@ -65,3 +67,23 @@ async def update_my_profile_page_endpoint(
         raise_core_error("profile_not_found")
 
     return profile_page
+
+
+@router.get(
+    "/contractors/{contractor_id}",
+    response_model=ContractorPublicProfileResponse,
+)
+def get_contractor_public_profile_endpoint(
+    contractor_id: int,
+    db: Session = Depends(get_db),
+    current_user: Profile = Depends(get_current_user),
+):
+    if current_user.role != "client":
+        raise_core_error("forbidden")
+
+    contractor_profile = get_contractor_public_profile(db, contractor_id)
+
+    if contractor_profile is None:
+        raise_core_error("profile_not_found")
+
+    return contractor_profile

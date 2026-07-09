@@ -113,3 +113,44 @@ class ContractorProfilePageResponse(BaseProfilePageResponse):
 
 
 ProfilePageResponse = ClientProfilePageResponse | ContractorProfilePageResponse
+
+
+class ContractorPublicProfile(BaseModel):
+    user_id: int
+    first_name: str | None = None
+    last_name: str | None = None
+    full_name: str | None = None
+    profile_picture: str | None = None
+    email: EmailStr
+    phone: str | None = None
+    city: str | None = None
+    country: str | None = None
+    created_at: datetime
+    about: str | None = None
+
+
+class ContractorPublicPortfolioItem(BaseModel):
+    id: int
+    title: str
+    description: str | None = None
+    project_url: str | None = None
+    image_url: str | None = None
+
+
+class ContractorPublicSkill(BaseModel):
+    id: int
+    name: str
+
+
+class ContractorPublicStat(BaseModel):
+    id: str
+    value: int | float | str
+    subtitle: str
+
+
+class ContractorPublicProfileResponse(BaseModel):
+    profile: ContractorPublicProfile
+    portfolio: list[ContractorPublicPortfolioItem]
+    skills: list[ContractorPublicSkill]
+    stats: list[ContractorPublicStat]
+    reviews: TargetReviewsResponse

@@ -63,6 +63,10 @@ class Profile(Base):
     )
 
     @property
+    def has_uploaded_picture(self) -> bool:
+        return self.profile_picture_blob is not None
+
+    @property
     def display_profile_picture(self) -> str | None:
         if self.profile_picture_blob is None:
             return self.profile_picture
