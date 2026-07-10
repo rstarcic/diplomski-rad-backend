@@ -2,7 +2,8 @@ from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-
+from app.profiles.schemas import ClientPublicProfile
+from app.reviews.schemas import TargetReviewsResponse
 LocationType = Literal["on_site", "hybrid", "remote"]
 BudgetType = Literal["fixed", "hourly"]
 JobStatus = Literal[
@@ -71,6 +72,9 @@ def clean_requirements(value: list[str]) -> list[str]:
     return requirements
 
 
+# Job create and update requests
+
+
 class JobBase(BaseModel):
     title: str = Field(..., min_length=1, max_length=255)
     category: str = Field(..., min_length=1, max_length=100)
@@ -120,11 +124,6 @@ class JobBase(BaseModel):
         return self
 
 
-class JobCreated(BaseModel):
-    job_id: int
-    status: JobStatus
-
-
 class JobCreate(JobBase):
     pass
 
@@ -133,20 +132,12 @@ class JobUpdate(JobBase):
     pass
 
 
-class JobSummaryResponse(BaseModel):
-    id: int
-    title: str
-    category: str
-    location_type: LocationType
-    location: str | None = None
-    budget_type: BudgetType
+# Full job responses
+
+
+class JobCreated(BaseModel):
+    job_id: int
     status: JobStatus
-    deadline: datetime
-    updated_at: datetime
-    applicants_count: int = 0
-    new_applicants_count: int = 0
-    contract_status: str = "not_started"
-    payment_status: str = "no_payments"
 
 
 class JobResponse(BaseModel):
@@ -178,7 +169,28 @@ class JobResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-# search jobs
+# Client posted jobs overview
+
+
+class JobSummaryResponse(BaseModel):
+    id: int
+    title: str
+    category: str
+    location_type: LocationType
+    location: str | None = None
+    budget_type: BudgetType
+    status: JobStatus
+    deadline: datetime
+    updated_at: datetime
+    applicants_count: int = 0
+    new_applicants_count: int = 0
+    contract_status: str = "not_started"
+    payment_status: str = "no_payments"
+
+
+# Contractor job search responses
+
+
 class JobSearchItem(BaseModel):
     id: int
     title: str
@@ -203,3 +215,16 @@ class JobSearchClient(BaseModel):
 class JobSearchItemResponse(BaseModel):
     job: JobSearchItem
     client: JobSearchClient
+
+
+class JobFilterOptionsResponse(BaseModel):
+    categories: list[str]
+    cities: list[str]
+
+
+# job details seen by contractor
+class JobDetailsPageResponse(BaseModel):
+    job: JobResponse
+    client: ClientPublicProfile
+    reviews: TargetReviewsResponse
+    already_applied: bool

@@ -1,6 +1,8 @@
 from app.dependencies import get_current_user
 from app.jobs.schemas import (
     JobCreate,
+    JobDetailsPageResponse,
+    JobFilterOptionsResponse,
     JobResponse,
     JobSearchItemResponse,
     JobSummaryResponse,
@@ -9,28 +11,61 @@ from app.jobs.schemas import (
 from app.jobs.service import (
     create_job,
     get_job_by_id,
+    get_job_details,
+    get_job_filter_options,
     get_my_jobs,
     get_open_jobs,
     update_job,
 )
+from app.pagination import PaginatedResponse, PaginationParams
 from app.profiles.models import Profile
 from database import get_db
 from errors import raise_core_error
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 router = APIRouter()
 
 
-@router.get("/", response_model=list[JobSearchItemResponse])
+@router.get("/", response_model=PaginatedResponse[JobSearchItemResponse])
 def get_open_jobs_endpoint(
+    search: str | None = Query(default=None, max_length=100),
+    category: str | None = Query(default=None),
+    location: str | None = Query(default=None),
+    location_type: str | None = Query(default=None),
+    budget_type: str | None = Query(default=None),
+    min_budget: float | None = Query(default=None, ge=0),
+    max_budget: float | None = Query(default=None, ge=0),
+    pagination: PaginationParams = Depends(),
     db: Session = Depends(get_db),
     current_user: Profile = Depends(get_current_user),
 ):
     if current_user.role != "contractor":
         raise_core_error("forbidden")
 
-    return get_open_jobs(db)
+    return get_open_jobs(
+        db=db,
+        search=search,
+        category=category,
+        location=location,
+        location_type=location_type,
+        budget_type=budget_type,
+        min_budget=min_budget,
+        max_budget=max_budget,
+        page=pagination.page,
+        page_size=pagination.page_size,
+    )
+
+
+@router.get("/filter-options", response_model=JobFilterOptionsResponse)
+def get_filter_options_endpoint(
+    db: Session = Depends(get_db),
+    current_user: Profile = Depends(get_current_user),
+):
+    if current_user.role != "contractor":
+        raise_core_error("forbidden")
+
+    return get_job_filter_options(db)
 
 
 @router.post("/", response_model=JobResponse, status_code=201)
@@ -54,6 +89,27 @@ def get_my_jobs_endpoint(
         raise_core_error("forbidden")
 
     return get_my_jobs(db, current_user.user_id)
+
+
+@router.get("/{job_id}/details", response_model=JobDetailsPageResponse)
+def get_job_details_endpoint(
+    job_id: int,
+    db: Session = Depends(get_db),
+    current_user: Profile = Depends(get_current_user),
+):
+    if current_user.role != "contractor":
+        raise_core_error("forbidden")
+
+    details = get_job_details(
+        db=db,
+        job_id=job_id,
+        contractor_id=current_user.user_id,
+    )
+
+    if details is None:
+        raise_core_error("job_not_found")
+
+    return details
 
 
 @router.get("/{job_id}", response_model=JobResponse, status_code=200)
