@@ -6,11 +6,9 @@ import aiohttp
 from app.integrations.schemas import (
     ContractCreateRequest,
     ContractServiceResponse,
-    ContractServiceSignatureRequest,
 )
 from errors import raise_core_error
 from dotenv import load_dotenv
-from fastapi import HTTPException
 
 load_dotenv(Path(__file__).resolve().parents[2] / ".env", override=False)
 
@@ -61,28 +59,3 @@ async def create_contract(
     return ContractServiceResponse.model_validate(response_data)
 
 
-async def sign_contract(
-    contract_id: int,
-    request: ContractServiceSignatureRequest,
-) -> ContractServiceResponse:
-    timeout = aiohttp.ClientTimeout(total=10)
-
-    try:
-        async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.post(
-                f"{CONTRACT_SERVICE_URL}/internal/contracts/{contract_id}/sign",
-                json=request.model_dump(mode="json"),
-                headers=_internal_headers(),
-            ) as response:
-                response_data = await response.json()
-
-                if response.status >= 400:
-                    detail = response_data.get("detail", response_data)
-                    raise HTTPException(status_code=response.status, detail=detail)
-
-    except asyncio.TimeoutError:
-        raise_core_error("contract_service_timeout")
-    except aiohttp.ClientError:
-        raise_core_error("contract_service_unavailable")
-
-    return ContractServiceResponse.model_validate(response_data)

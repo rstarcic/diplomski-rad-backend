@@ -74,11 +74,26 @@ services:
       volumes:
         - contract_data:/var/lib/postgresql/data
       healthcheck:
-        test: ["CMD-SHELL", "pg_isready -U postgres -d payment_db"]
+        test: ["CMD-SHELL", "pg_isready -U postgres -d contract_db"]
         interval: 5s
         timeout: 5s
         retries: 10
 
+  contract-service:
+    build:
+      context: ./contract-service
+    ports:
+      - "8002:8002"
+    env_file:
+      - ./contract-service/.env
+    environment:
+      CONTRACT_DB: postgresql+psycopg2://postgres:postgres@contract-db:5432/contract_db
+      CORE_SERVICE_URL: http://host.docker.internal:8001
+    depends_on:
+      contract-db:
+        condition: service_healthy
+    networks:
+      - worklink_network
 volumes:
   auth_data:
   core_data:

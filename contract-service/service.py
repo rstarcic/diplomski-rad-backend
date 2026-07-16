@@ -9,7 +9,6 @@ from schemas import (
     ContractCreateRequest,
     ContractJob,
     ContractParty,
-    ContractSignatureRequest,
     ContractTerms,
 )
 from sqlalchemy import select
@@ -178,6 +177,18 @@ def get_contract_by_application_id(
     return contract
 
 
+def authorize_contract_party(contract: Contract, user_id: int) -> None:
+    if user_id not in {contract.client_id, contract.contractor_id}:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "contract_access_forbidden",
+                "message": "Only a party to the contract may access it.",
+                "field": None,
+            },
+        )
+
+
 def _cancel_if_signature_deadline_passed(
     db: Session,
     contract: Contract,
@@ -203,7 +214,8 @@ def _cancel_if_signature_deadline_passed(
 def sign_contract(
     db: Session,
     contract_id: int,
-    request: ContractSignatureRequest,
+    user_id: int,
+    signature_data_url: str,
 ) -> Contract:
     contract = get_contract_by_id(db, contract_id)
 
@@ -217,25 +229,17 @@ def sign_contract(
             },
         )
 
-    signature = _validate_signature_data_url(request.signature)
+    signature = _validate_signature_data_url(signature_data_url)
     signed_at = datetime.now(timezone.utc)
 
-    if request.user_id == contract.client_id:
+    authorize_contract_party(contract, user_id)
+
+    if user_id == contract.client_id:
         contract.client_signature_url = signature
         contract.client_signed_at = signed_at
-    elif request.user_id == contract.contractor_id:
+    elif user_id == contract.contractor_id:
         contract.contractor_signature_url = signature
         contract.contractor_signed_at = signed_at
-    else:
-        raise HTTPException(
-            status_code=403,
-            detail={
-                "code": "contract_signature_forbidden",
-                "message": "Only a party to the contract may sign it.",
-                "field": None,
-            },
-        )
-
     if contract.client_signed_at and contract.contractor_signed_at:
         contract.status = "active"
         contract.starts_at = contract.starts_at or signed_at + timedelta(days=1)
@@ -261,3 +265,24 @@ def render_contract_html(contract: Contract) -> str:
     template = template_environment.get_template("contract.html")
 
     return template.render(contract=contract)
+
+
+def render_contract_pdf(contract: Contract) -> bytes:
+    try:
+        from weasyprint import HTML
+    except (ImportError, OSError) as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": "pdf_renderer_unavailable",
+                "message": "PDF generation is temporarily unavailable.",
+                "field": None,
+            },
+        ) from exc
+
+    html = render_contract_html(contract)
+
+    return HTML(
+        string=html,
+        base_url=str(TEMPLATES_DIR),
+    ).write_pdf()

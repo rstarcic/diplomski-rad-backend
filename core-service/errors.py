@@ -1,6 +1,18 @@
 from fastapi import HTTPException
 
 CORE_ERRORS = {
+    "contract_access_forbidden": {
+        "status_code": 403,
+        "code": "contract_access_forbidden",
+        "message": "Only a party to the contract may access it.",
+        "field": None,
+    },
+    "pdf_renderer_unavailable": {
+        "status_code": 503,
+        "code": "pdf_renderer_unavailable",
+        "message": "PDF generation is temporarily unavailable.",
+        "field": None,
+    },
     "contract_signature_deadline_expired": {
         "status_code": 409,
         "code": "contract_signature_deadline_expired",

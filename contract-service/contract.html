@@ -134,6 +134,17 @@
           </span>
         </td>
       </tr>
+      {% if contract.budget_type != "fixed" %}
+      <tr>
+        <td colspan="2">
+          <span class="summary-item-label">Estimated total compensation</span>
+          <span class="summary-item-value">
+            {{ "%.2f"|format(contract.budget_amount * contract.hours_per_week * contract.duration / 7) }}
+            {{ contract.currency }}
+          </span>
+        </td>
+      </tr>
+      {% endif %}
     </tbody>
   </table>
 </section>
@@ -375,6 +386,14 @@
                 Expected workload:
                 {{ contract.hours_per_week }} hours per week for
                 {{ contract.duration }} days.
+              </span>
+
+              <span class="amount-estimate-label">
+                Estimated total compensation
+              </span>
+              <span class="amount-estimate">
+                {{ "%.2f"|format(contract.budget_amount * contract.hours_per_week * contract.duration / 7) }}
+                {{ contract.currency }}
               </span>
             {% endif %}
           </div>

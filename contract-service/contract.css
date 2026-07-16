@@ -522,6 +522,24 @@ li::before {
   font-style: normal;
 }
 
+.amount-estimate-label {
+  display: block;
+  margin-top: 12px;
+  color: var(--color-text-secondary);
+  font-size: 8pt;
+  font-weight: 700;
+  letter-spacing: 0.7px;
+  text-transform: uppercase;
+}
+
+.amount-estimate {
+  display: block;
+  margin-top: 3px;
+  color: var(--color-primary);
+  font-size: 13pt;
+  font-weight: 700;
+}
+
 .payment-detail {
   margin-top: 13px;
   padding: 12px 14px;

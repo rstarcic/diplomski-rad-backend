@@ -41,11 +41,3 @@ class ContractServiceResponse(BaseModel):
     application_id: int
     status: str
 
-
-class ContractSignatureRequest(BaseModel):
-    signature: str = Field(min_length=1)
-
-
-class ContractServiceSignatureRequest(BaseModel):
-    user_id: int
-    signature: str

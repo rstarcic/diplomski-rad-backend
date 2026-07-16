@@ -38,8 +38,11 @@ class ContractCreateRequest(BaseModel):
 
 
 class ContractSignatureRequest(BaseModel):
-    user_id: int
     signature: str = Field(min_length=1)
+
+
+class ContractEmailResponse(BaseModel):
+    message: str
 
 
 class ContractResponse(BaseModel):
