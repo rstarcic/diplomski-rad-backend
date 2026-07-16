@@ -1,13 +1,15 @@
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from app.profiles.schemas import ClientPublicProfile
 from app.reviews.schemas import TargetReviewsResponse
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
 LocationType = Literal["on_site", "hybrid", "remote"]
 BudgetType = Literal["fixed", "hourly"]
 JobStatus = Literal[
     "open",
+    "awaiting_contract",
     "in_progress",
     "done_by_contractor",
     "completed_by_client",
@@ -90,8 +92,8 @@ class JobBase(BaseModel):
     budget_type: BudgetType
     budget_amount: float = Field(..., gt=0)
 
-    duration: str = Field(..., min_length=1, max_length=50)
-    hours_per_week: str = Field(..., min_length=1, max_length=50)
+    duration: int = Field(..., gt=0)
+    hours_per_week: int = Field(..., gt=0, le=168)
 
     @field_validator("location_type", mode="before")
     @classmethod
@@ -159,8 +161,8 @@ class JobResponse(BaseModel):
     budget_amount: float
     currency: Literal["EUR"] = "EUR"
 
-    duration: str
-    hours_per_week: str
+    duration: int
+    hours_per_week: int
     status: JobStatus
 
     created_at: datetime
@@ -227,4 +229,5 @@ class JobDetailsPageResponse(BaseModel):
     job: JobResponse
     client: ClientPublicProfile
     reviews: TargetReviewsResponse
+    already_applied: bool
     already_applied: bool

@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 
 from database import Base
-from sqlalchemy import JSON, CheckConstraint, DateTime, Float, String, Text
+from sqlalchemy import JSON, CheckConstraint, DateTime, Float, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 
@@ -22,7 +22,7 @@ class Job(Base):
             name="ck_jobs_budget_type",
         ),
         CheckConstraint(
-            "status IN ('open', 'in_progress', 'done_by_contractor', 'completed_by_client', 'incomplete', 'cancelled')",
+            "status IN ('open', 'awaiting_contract', 'in_progress', 'done_by_contractor', 'completed_by_client', 'incomplete', 'cancelled')",
             name="ck_jobs_status",
         ),
         CheckConstraint(
@@ -43,7 +43,7 @@ class Job(Base):
     description: Mapped[str] = mapped_column(Text, nullable=False)
 
     location_type: Mapped[str] = mapped_column(String(50), nullable=False)
-    location: Mapped[str] = mapped_column(String(255), nullable=False)
+    location: Mapped[str] = mapped_column(String(255), nullable=True)
     deadline: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     deliverables: Mapped[str] = mapped_column(Text, nullable=False)
@@ -53,8 +53,14 @@ class Job(Base):
     budget_amount: Mapped[float] = mapped_column(Float, nullable=False)
     currency: Mapped[str] = mapped_column(String(10), nullable=False, default="EUR")
 
-    duration: Mapped[str] = mapped_column(String(50), nullable=False)
-    hours_per_week: Mapped[str] = mapped_column(String(50), nullable=False)
+    duration: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+    )
+    hours_per_week: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+    )
 
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="open")
 

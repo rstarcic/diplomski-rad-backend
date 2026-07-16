@@ -59,10 +59,31 @@ services:
       timeout: 5s
       retries: 10
 
+  contract-db:
+      image: postgres:16.2
+      container_name: contract-db
+      restart: always
+      environment:
+        POSTGRES_DB: contract_db
+        POSTGRES_USER: postgres
+        POSTGRES_PASSWORD: postgres
+      ports:
+        - "5437:5432"
+      networks:
+        - worklink_network
+      volumes:
+        - contract_data:/var/lib/postgresql/data
+      healthcheck:
+        test: ["CMD-SHELL", "pg_isready -U postgres -d payment_db"]
+        interval: 5s
+        timeout: 5s
+        retries: 10
+
 volumes:
   auth_data:
   core_data:
   payment_data:
+  contract_data:
 
 networks:
   worklink_network:
