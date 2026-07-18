@@ -1,7 +1,17 @@
 from datetime import datetime, timezone
 
 from database import Base
-from sqlalchemy import JSON, CheckConstraint, DateTime, Float, Integer, String, Text
+from sqlalchemy import (
+    JSON,
+    CheckConstraint,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 
@@ -13,6 +23,10 @@ class Job(Base):
     __tablename__ = "jobs"
 
     __table_args__ = (
+        UniqueConstraint(
+            "source_job_id",
+            name="uq_jobs_source_job_id",
+        ),
         CheckConstraint(
             "location_type IN ('on_site', 'hybrid', 'remote')",
             name="ck_jobs_location_type",
@@ -37,6 +51,10 @@ class Job(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     client_id: Mapped[int] = mapped_column(nullable=False)
+    source_job_id: Mapped[int | None] = mapped_column(
+        ForeignKey("jobs.id"),
+        nullable=True,
+    )
 
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     category: Mapped[str] = mapped_column(String(100), nullable=False)

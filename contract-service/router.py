@@ -24,6 +24,7 @@ from service import (
     render_contract_html,
     render_contract_pdf,
     sign_contract,
+    update_contract_status_by_job,
 )
 from sqlalchemy.orm import Session
 
@@ -51,6 +52,36 @@ def create_contract_endpoint(
     db: Session = Depends(get_db),
 ):
     return create_contract(db=db, request=request)
+
+
+@internal_router.patch(
+    "/job/{job_id}/complete",
+    response_model=ContractResponse,
+)
+def complete_contract_endpoint(
+    job_id: int,
+    db: Session = Depends(get_db),
+):
+    return update_contract_status_by_job(
+        db=db,
+        job_id=job_id,
+        action="complete",
+    )
+
+
+@internal_router.patch(
+    "/job/{job_id}/cancel",
+    response_model=ContractResponse,
+)
+def cancel_contract_endpoint(
+    job_id: int,
+    db: Session = Depends(get_db),
+):
+    return update_contract_status_by_job(
+        db=db,
+        job_id=job_id,
+        action="cancel",
+    )
 
 
 router = APIRouter(prefix="/contracts", tags=["contracts"])

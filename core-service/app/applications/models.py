@@ -21,7 +21,7 @@ class Application(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "status IN ('pending', 'negotiating', 'accepted', 'rejected', 'withdrawn')",
+            "status IN ('pending', 'selected', 'accepted', 'rejected', 'withdrawn')",
             name="ck_applications_status",
         ),
         UniqueConstraint(

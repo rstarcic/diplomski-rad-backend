@@ -23,7 +23,7 @@ class Negotiation(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "status IN ('pending_client', 'pending_contractor', 'expired')",
+            "status IN ('pending_client', 'pending_contractor', 'accepted', 'rejected', 'expired')",
             name="ck_negotiations_status",
         ),
     )

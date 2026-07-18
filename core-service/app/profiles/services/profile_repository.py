@@ -15,6 +15,14 @@ def get_contractor_profile_by_user_id(db: Session, user_id: int) -> Profile | No
     )
 
 
+def get_client_profile_by_user_id(db: Session, user_id: int) -> Profile | None:
+    return (
+        db.query(Profile)
+        .filter(Profile.user_id == user_id, Profile.role == "client")
+        .first()
+    )
+
+
 def get_skills_for_contractor(db: Session, user_id: int) -> list[ContractorSkill]:
     if not get_contractor_profile_by_user_id(db, user_id):
         return []

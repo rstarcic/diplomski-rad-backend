@@ -115,10 +115,8 @@ class ContractorProfilePageResponse(BaseProfilePageResponse):
 ProfilePageResponse = ClientProfilePageResponse | ContractorProfilePageResponse
 
 
-class ContractorPublicProfile(BaseModel):
+class PublicProfile(BaseModel):
     user_id: int
-    first_name: str | None = None
-    last_name: str | None = None
     full_name: str | None = None
     profile_picture: str | None = None
     email: EmailStr
@@ -127,6 +125,14 @@ class ContractorPublicProfile(BaseModel):
     country: str | None = None
     created_at: datetime
     about: str | None = None
+
+
+class ContractorPublicProfile(PublicProfile):
+    pass
+
+
+class ClientPublicProfile(PublicProfile):
+    pass
 
 
 class ContractorPublicPortfolioItem(BaseModel):
@@ -148,9 +154,21 @@ class ContractorPublicStat(BaseModel):
     subtitle: str
 
 
+class ClientPublicStat(BaseModel):
+    id: str
+    value: int | float | str
+    subtitle: str
+
+
 class ContractorPublicProfileResponse(BaseModel):
     profile: ContractorPublicProfile
     portfolio: list[ContractorPublicPortfolioItem]
     skills: list[ContractorPublicSkill]
     stats: list[ContractorPublicStat]
+    reviews: TargetReviewsResponse
+
+
+class ClientPublicProfileResponse(BaseModel):
+    profile: ClientPublicProfile
+    stats: list[ClientPublicStat]
     reviews: TargetReviewsResponse

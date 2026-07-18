@@ -23,8 +23,6 @@ TEXT_FIELDS = (
     "description",
     "location",
     "deliverables",
-    "duration",
-    "hours_per_week",
 )
 
 
@@ -127,7 +125,7 @@ class JobBase(BaseModel):
 
 
 class JobCreate(JobBase):
-    pass
+    source_job_id: int | None = Field(default=None, gt=0)
 
 
 class JobUpdate(JobBase):
@@ -145,6 +143,7 @@ class JobCreated(BaseModel):
 class JobResponse(BaseModel):
     id: int
     client_id: int
+    source_job_id: int | None = None
 
     title: str
     category: str
@@ -176,6 +175,7 @@ class JobResponse(BaseModel):
 
 class JobSummaryResponse(BaseModel):
     id: int
+    replacement_job_id: int | None = None
     title: str
     category: str
     location_type: LocationType
@@ -230,4 +230,10 @@ class JobDetailsPageResponse(BaseModel):
     client: ClientPublicProfile
     reviews: TargetReviewsResponse
     already_applied: bool
-    already_applied: bool
+    application_status: Literal[
+        "pending",
+        "selected",
+        "accepted",
+        "rejected",
+        "withdrawn",
+    ] | None = None

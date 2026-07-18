@@ -1,3 +1,5 @@
+import base64
+import binascii
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from uuid import uuid4
@@ -5,18 +7,9 @@ from uuid import uuid4
 from fastapi import HTTPException
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from models import Contract
-from schemas import (
-    ContractCreateRequest,
-    ContractJob,
-    ContractParty,
-    ContractTerms,
-)
+from schemas import ContractCreateRequest, ContractJob, ContractParty, ContractTerms
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-import base64
-import binascii
-
-from fastapi import HTTPException
 
 TEMPLATES_DIR = Path(__file__).resolve().parent
 template_environment = Environment(
@@ -173,6 +166,63 @@ def get_contract_by_application_id(
         )
 
     _cancel_if_signature_deadline_passed(db, contract)
+
+    return contract
+
+
+def update_contract_status_by_job(
+    db: Session,
+    job_id: int,
+    action: str,
+) -> Contract:
+    contract = db.scalar(
+        select(Contract).where(Contract.job_id == job_id).with_for_update()
+    )
+
+    if contract is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Contract not found.",
+        )
+
+    if action == "complete":
+        target_status = "completed"
+
+        if contract.status == "completed":
+            return contract
+
+        if contract.status != "active":
+            raise HTTPException(
+                status_code=409,
+                detail="Only an active contract can be completed.",
+            )
+
+    elif action == "cancel":
+        target_status = "cancelled"
+
+        if contract.status == "cancelled":
+            return contract
+
+        if contract.status == "completed":
+            raise HTTPException(
+                status_code=409,
+                detail="A completed contract cannot be cancelled.",
+            )
+
+    else:
+        raise HTTPException(
+            status_code=422,
+            detail="Invalid contract action.",
+        )
+
+    contract.status = target_status
+
+    try:
+        db.commit()
+        db.refresh(contract)
+    except Exception:
+        db.rollback()
+        raise
 
     return contract
 

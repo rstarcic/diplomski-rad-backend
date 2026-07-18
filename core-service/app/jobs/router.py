@@ -15,6 +15,9 @@ from app.jobs.service import (
     get_job_filter_options,
     get_my_jobs,
     get_open_jobs,
+    mark_job_completed,
+    mark_job_done,
+    mark_job_incomplete,
     update_job,
 )
 from app.pagination import PaginatedResponse, PaginationParams
@@ -25,6 +28,33 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 router = APIRouter()
+
+
+@router.patch("/{job_id}/done", response_model=JobResponse)
+def mark_job_done_endpoint(
+    job_id: int,
+    db: Session = Depends(get_db),
+    current_user: Profile = Depends(get_current_user),
+):
+    return mark_job_done(db, job_id, current_user)
+
+
+@router.patch("/{job_id}/complete", response_model=JobResponse)
+async def mark_job_completed_endpoint(
+    job_id: int,
+    db: Session = Depends(get_db),
+    current_user: Profile = Depends(get_current_user),
+):
+    return await mark_job_completed(db, job_id, current_user)
+
+
+@router.patch("/{job_id}/incomplete", response_model=JobResponse)
+async def mark_job_incomplete_endpoint(
+    job_id: int,
+    db: Session = Depends(get_db),
+    current_user: Profile = Depends(get_current_user),
+):
+    return await mark_job_incomplete(db, job_id, current_user)
 
 
 @router.get("/", response_model=PaginatedResponse[JobSearchItemResponse])

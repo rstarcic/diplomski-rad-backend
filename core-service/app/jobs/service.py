@@ -1,6 +1,10 @@
 from datetime import datetime, timezone
 
 from app.applications.models import Application
+from app.integrations.client import (
+    create_pending_payment,
+    update_contract_status_for_job,
+)
 from app.jobs.models import Job
 from app.jobs.schemas import (
     JobCreate,
@@ -18,7 +22,7 @@ from app.profiles.models import Profile
 from app.profiles.schemas import ClientPublicProfile
 from app.reviews.service import get_reviews_for_target
 from errors import raise_core_error
-from sqlalchemy import or_
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 
@@ -50,16 +54,44 @@ def build_job_search_item(
 
 
 def create_job(db: Session, client_id: int, data: JobCreate) -> JobResponse:
+    source_job_id = data.source_job_id
+
+    if source_job_id is not None:
+        source_job = db.scalar(
+            select(Job).where(Job.id == source_job_id).with_for_update()
+        )
+
+        if source_job is None:
+            raise_core_error("source_job_not_found")
+
+        if source_job.client_id != client_id:
+            raise_core_error("source_job_forbidden")
+
+        if source_job.status != "cancelled":
+            raise_core_error("source_job_not_cancelled")
+
+        replacement_exists = db.scalar(
+            select(Job.id).where(Job.source_job_id == source_job_id)
+        )
+
+        if replacement_exists is not None:
+            raise_core_error("replacement_job_already_exists")
+
     new_job = Job(
         client_id=client_id,
+        source_job_id=source_job_id,
         currency="EUR",
         status="open",
-        **data.model_dump(),
+        **data.model_dump(exclude={"source_job_id"}),
     )
 
-    db.add(new_job)
-    db.commit()
-    db.refresh(new_job)
+    try:
+        db.add(new_job)
+        db.commit()
+        db.refresh(new_job)
+    except Exception:
+        db.rollback()
+        raise
 
     return JobResponse.model_validate(new_job)
 
@@ -123,14 +155,13 @@ def get_job_details(
         return None
 
     job, client = row
-    already_applied = (
-        db.query(Application.id)
+    application_status = (
+        db.query(Application.status)
         .filter(
             Application.job_id == job.id,
             Application.contractor_id == contractor_id,
         )
-        .first()
-        is not None
+        .scalar()
     )
     reviews = get_reviews_for_target(
         db=db,
@@ -152,7 +183,8 @@ def get_job_details(
             about=client.about,
         ),
         reviews=reviews,
-        already_applied=already_applied,
+        already_applied=application_status is not None,
+        application_status=application_status,
     )
 
 
@@ -273,9 +305,23 @@ def get_my_jobs(db: Session, client_id: int) -> list[JobSummaryResponse]:
         .all()
     )
 
+    replacement_by_source_id = {
+        source_job_id: replacement_job_id
+        for replacement_job_id, source_job_id in db.query(
+            Job.id,
+            Job.source_job_id,
+        )
+        .filter(
+            Job.client_id == client_id,
+            Job.source_job_id.isnot(None),
+        )
+        .all()
+    }
+
     return [
         JobSummaryResponse(
             id=job.id,
+            replacement_job_id=replacement_by_source_id.get(job.id),
             title=job.title,
             category=job.category,
             location_type=job.location_type,
@@ -287,3 +333,96 @@ def get_my_jobs(db: Session, client_id: int) -> list[JobSummaryResponse]:
         )
         for job in jobs
     ]
+
+
+def _get_accepted_job_application(
+    db: Session,
+    job_id: int,
+) -> tuple[Job, Application]:
+    row = db.execute(
+        select(Job, Application)
+        .join(Application, Application.job_id == Job.id)
+        .where(
+            Job.id == job_id,
+            Application.status == "accepted",
+        )
+        .with_for_update()
+    ).one_or_none()
+
+    if row is None:
+        raise_core_error("job_not_found")
+
+    return row
+
+
+def mark_job_done(db: Session, job_id: int, current_user: Profile) -> JobResponse:
+    job, application = _get_accepted_job_application(db, job_id)
+
+    if current_user.role != "contractor":
+        raise_core_error("forbidden")
+    if application.contractor_id != current_user.user_id:
+        raise_core_error("forbidden")
+    if job.status != "in_progress":
+        raise_core_error("job_cannot_be_marked_done")
+
+    job.status = "done_by_contractor"
+
+    try:
+        db.commit()
+        db.refresh(job)
+    except Exception:
+        db.rollback()
+        raise
+
+    return JobResponse.model_validate(job)
+
+
+async def mark_job_completed(
+    db: Session,
+    job_id: int,
+    current_user: Profile,
+) -> JobResponse:
+    job, application = _get_accepted_job_application(db, job_id)
+
+    if current_user.role != "client" or job.client_id != current_user.user_id:
+        raise_core_error("forbidden")
+    if job.status != "done_by_contractor":
+        raise_core_error("job_cannot_be_completed")
+
+    await update_contract_status_for_job(job.id, "complete")
+    # await create_pending_payment(job.id, application.id)  # TODO
+    job.status = "completed_by_client"
+
+    try:
+        db.commit()
+        db.refresh(job)
+    except Exception:
+        db.rollback()
+        raise
+
+    return JobResponse.model_validate(job)
+
+
+async def mark_job_incomplete(
+    db: Session,
+    job_id: int,
+    current_user: Profile,
+) -> JobResponse:
+    job, _application = _get_accepted_job_application(db, job_id)
+
+    if current_user.role != "client" or job.client_id != current_user.user_id:
+        raise_core_error("forbidden")
+    if job.status != "done_by_contractor":
+        raise_core_error("job_cannot_be_marked_incomplete")
+
+    await update_contract_status_for_job(job.id, "cancel")
+    job.status = "incomplete"
+
+    try:
+        db.commit()
+        db.refresh(job)
+    except Exception:
+        db.rollback()
+        raise
+
+    return JobResponse.model_validate(job)

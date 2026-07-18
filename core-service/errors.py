@@ -1,6 +1,54 @@
 from fastapi import HTTPException
 
 CORE_ERRORS = {
+    "application_cannot_be_withdrawn": {
+        "status_code": 409,
+        "code": "application_cannot_be_withdrawn",
+        "message": "This application can no longer be withdrawn.",
+        "field": "status",
+    },
+    "job_cannot_be_marked_done": {
+        "status_code": 409,
+        "code": "job_cannot_be_marked_done",
+        "message": "The job cannot be marked done from its current status.",
+        "field": "status",
+    },
+    "job_cannot_be_completed": {
+        "status_code": 409,
+        "code": "job_cannot_be_completed",
+        "message": "Only a job marked done by the contractor can be completed.",
+        "field": "status",
+    },
+    "job_cannot_be_marked_incomplete": {
+        "status_code": 409,
+        "code": "job_cannot_be_marked_incomplete",
+        "message": "Only a job marked done by the contractor can be marked incomplete.",
+        "field": "status",
+    },
+    "contract_status_update_failed": {
+        "status_code": 502,
+        "code": "contract_status_update_failed",
+        "message": "The contract status could not be synchronized.",
+        "field": "status",
+    },
+    "payment_creation_failed": {
+        "status_code": 502,
+        "code": "payment_creation_failed",
+        "message": "The pending payment could not be created.",
+        "field": "status",
+    },
+    "payment_service_timeout": {
+        "status_code": 504,
+        "code": "payment_service_timeout",
+        "message": "The payment service did not respond in time.",
+        "field": None,
+    },
+    "payment_service_unavailable": {
+        "status_code": 503,
+        "code": "payment_service_unavailable",
+        "message": "The payment service is currently unavailable.",
+        "field": None,
+    },
     "contract_access_forbidden": {
         "status_code": 403,
         "code": "contract_access_forbidden",
@@ -175,6 +223,30 @@ CORE_ERRORS = {
         "message": "Only open jobs can be updated.",
         "field": "status",
     },
+    "source_job_not_found": {
+        "status_code": 404,
+        "code": "source_job_not_found",
+        "message": "The source job could not be found.",
+        "field": "source_job_id",
+    },
+    "source_job_forbidden": {
+        "status_code": 403,
+        "code": "source_job_forbidden",
+        "message": "The source job does not belong to the current client.",
+        "field": "source_job_id",
+    },
+    "source_job_not_cancelled": {
+        "status_code": 409,
+        "code": "source_job_not_cancelled",
+        "message": "Only a cancelled job can be replaced.",
+        "field": "source_job_id",
+    },
+    "replacement_job_already_exists": {
+        "status_code": 409,
+        "code": "replacement_job_already_exists",
+        "message": "A replacement for this job already exists.",
+        "field": "source_job_id",
+    },
     "profile_picture_invalid_type": {
         "status_code": 422,
         "code": "profile_picture_invalid_type",
@@ -246,6 +318,12 @@ CORE_ERRORS = {
         "code": "negotiation_already_exists",
         "message": "A negotiation already exists for this application.",
         "field": None,
+    },
+    "negotiation_round_limit_reached": {
+        "status_code": 409,
+        "code": "negotiation_round_limit_reached",
+        "message": "The negotiation ended because the maximum of three rounds was reached.",
+        "field": "round_number",
     },
 }
 
