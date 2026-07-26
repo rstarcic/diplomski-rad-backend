@@ -11,8 +11,6 @@ class Base(DeclarativeBase):
     pass
 
 
-import app.payments.models  # noqa: E402 — registers models with Base before create_all
-
 PAYMENT_DB = os.getenv("PAYMENT_DB")
 
 if not PAYMENT_DB:
@@ -35,5 +33,5 @@ def get_db():
         db.close()
 
 
-def init_db():
+def init_db() -> None:
     Base.metadata.create_all(bind=engine)
