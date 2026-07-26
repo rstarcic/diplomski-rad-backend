@@ -47,6 +47,7 @@ services:
       POSTGRES_DB: payment_db
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
+      FRONTEND_URL: http://localhost:5173
     ports:
       - "5436:5432"
     networks:
@@ -79,6 +80,44 @@ services:
         timeout: 5s
         retries: 10
 
+  auth-service:
+    build:
+      context: ./auth-service
+    container_name: auth-service
+    restart: always
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./auth-service/.env
+    environment:
+      AUTH_DB: postgresql+psycopg2://postgres:postgres@auth-db:5432/auth_db
+      CORE_SERVICE_URL: http://core-service:8001
+      BACKEND_URL: http://localhost:8000
+    depends_on:
+      auth-db:
+        condition: service_healthy
+    networks:
+      - worklink_network
+
+  core-service:
+    build:
+      context: ./core-service
+    container_name: core-service
+    restart: always
+    ports:
+      - "8001:8001"
+    env_file:
+      - ./core-service/.env
+    environment:
+      CORE_DB: postgresql+psycopg2://postgres:postgres@core-db:5432/core_db
+      CONTRACT_SERVICE_URL: http://contract-service:8002
+      PAYMENT_SERVICE_URL: http://payment-service:8003
+    depends_on:
+      core-db:
+        condition: service_healthy
+    networks:
+      - worklink_network
+
   contract-service:
     build:
       context: ./contract-service
@@ -88,9 +127,28 @@ services:
       - ./contract-service/.env
     environment:
       CONTRACT_DB: postgresql+psycopg2://postgres:postgres@contract-db:5432/contract_db
-      CORE_SERVICE_URL: http://host.docker.internal:8001
+      CORE_SERVICE_URL: http://core-service:8001
     depends_on:
       contract-db:
+        condition: service_healthy
+    networks:
+      - worklink_network
+
+  payment-service:
+    build:
+      context: ./payment-service
+    container_name: payment-service
+    restart: always
+    ports:
+      - "8003:8003"
+    env_file:
+      - ./payment-service/.env
+    environment:
+      PAYMENT_DB: postgresql+psycopg2://postgres:postgres@payment-db:5432/payment_db
+      CORE_SERVICE_URL: http://core-service:8001
+      CONTRACT_SERVICE_URL: http://contract-service:8002
+    depends_on:
+      payment-db:
         condition: service_healthy
     networks:
       - worklink_network
