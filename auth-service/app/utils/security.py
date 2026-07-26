@@ -10,7 +10,7 @@ from errors import raise_auth_error
 from jose import ExpiredSignatureError, JWTError, jwt
 from passlib.context import CryptContext
 
-load_dotenv(Path(__file__).resolve().parents[2] / ".env", override=True)
+load_dotenv(Path(__file__).resolve().parents[2] / ".env", override=False)
 
 SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = os.getenv("ALGORITHM", "HS256")

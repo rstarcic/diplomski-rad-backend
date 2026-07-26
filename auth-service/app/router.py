@@ -6,6 +6,7 @@ import aiohttp
 from app.dependecies import get_current_user
 from app.models import User
 from app.schemas import (
+    AuthUserResponse,
     ForgotPasswordRequest,
     LoginRequest,
     LoginResponse,
@@ -20,15 +21,15 @@ from app.services.auth_service import (
     register_user,
     revoke_session,
 )
+from app.services.email_verification_service import (
+    create_verification_token,
+    verify_email_token,
+)
 from app.services.google_service import (
     create_google_user,
     exchange_code_for_tokens,
     get_or_raise_google_user,
     verify_google_token,
-)
-from app.services.email_verification_service import (
-    create_verification_token,
-    verify_email_token,
 )
 from app.services.password_reset_service import request_password_reset, reset_password
 from app.services.pkce_service import consume_pkce_session, create_pkce_session
@@ -148,7 +149,7 @@ def refresh(request: Request, response: Response, db: Session = Depends(get_db))
     return {"message": "Refreshed"}
 
 
-@router.get("/me")
+@router.get("/me", response_model=AuthUserResponse)
 def get_me(current_user: User = Depends(get_current_user)):
     return current_user
 
@@ -217,7 +218,9 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
             user = get_or_raise_google_user(db, claims)
         else:
             user = create_google_user(db, claims, flow_type)
-            await _init_core_profile(user)
+
+        # Idempotent call: it also repairs users created while core was unavailable.
+        await _init_core_profile(user)
 
         response = RedirectResponse(
             url=f"{CLIENT_ENDPOINT}/{user.role}/dashboard", status_code=302
@@ -244,4 +247,5 @@ def _build_google_url(state: str, challenge: str) -> str:
         "access_type": "offline",
         "prompt": "consent",
     }
+    return f"{GOOGLE_AUTH_ENDPOINT}?{urlencode(params)}"
     return f"{GOOGLE_AUTH_ENDPOINT}?{urlencode(params)}"
