@@ -4,17 +4,25 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from uuid import uuid4
 
+from app.contracts.schemas import (
+    ContractCreateRequest,
+    ContractJob,
+    ContractParty,
+    ContractTerms,
+)
 from fastapi import HTTPException
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from models import Contract
-from schemas import ContractCreateRequest, ContractJob, ContractParty, ContractTerms
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-TEMPLATES_DIR = Path(__file__).resolve().parent
+TEMPLATES_DIR = Path(__file__).resolve().parents[1] / "documents"
+
 template_environment = Environment(
     loader=FileSystemLoader(TEMPLATES_DIR),
-    autoescape=select_autoescape(("html", "xml")),
+    autoescape=select_autoescape(
+        ("html", "xml"),
+    ),
 )
 
 SIGNATURE_DEADLINE = timedelta(days=1)
@@ -134,42 +142,6 @@ def create_contract(
     return contract
 
 
-def get_contract_by_id(
-    db: Session,
-    contract_id: int,
-) -> Contract:
-    contract = db.get(Contract, contract_id)
-
-    if contract is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Contract not found",
-        )
-
-    _cancel_if_signature_deadline_passed(db, contract)
-
-    return contract
-
-
-def get_contract_by_application_id(
-    db: Session,
-    application_id: int,
-) -> Contract:
-    contract = db.scalar(
-        select(Contract).where(Contract.application_id == application_id)
-    )
-
-    if contract is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Contract not found",
-        )
-
-    _cancel_if_signature_deadline_passed(db, contract)
-
-    return contract
-
-
 def update_contract_status_by_job(
     db: Session,
     job_id: int,
@@ -223,6 +195,42 @@ def update_contract_status_by_job(
     except Exception:
         db.rollback()
         raise
+
+    return contract
+
+
+def get_contract_by_id(
+    db: Session,
+    contract_id: int,
+) -> Contract:
+    contract = db.get(Contract, contract_id)
+
+    if contract is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Contract not found",
+        )
+
+    _cancel_if_signature_deadline_passed(db, contract)
+
+    return contract
+
+
+def get_contract_by_application_id(
+    db: Session,
+    application_id: int,
+) -> Contract:
+    contract = db.scalar(
+        select(Contract).where(Contract.application_id == application_id)
+    )
+
+    if contract is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Contract not found",
+        )
+
+    _cancel_if_signature_deadline_passed(db, contract)
 
     return contract
 

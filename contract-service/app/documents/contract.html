@@ -1,0 +1,907 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  />
+
+  <title>Service Agreement</title>
+
+  <style>
+    {% include "contract.css" %}
+  </style>
+</head>
+
+<body>
+  <main class="contract">
+    <header class="document-header">
+      <p class="document-eyebrow">
+        Independent Services
+      </p>
+
+      <h1 class="document-title">
+        Service Agreement
+      </h1>
+
+      <p class="document-subtitle">
+        An agreement governing the scope, delivery and compensation of
+        professional services between the Client and the Contractor.
+      </p>
+
+      <div class="document-reference">
+          Contract reference:
+        <strong>{{ contract.contract_number }}</strong>
+      </div>
+    </header>
+
+    <section class="summary-card">
+  <h2 class="section-label">Agreement summary</h2>
+
+  <table class="summary-table">
+    <tbody>
+      <tr>
+        <td class="summary-category" colspan="2">Agreement details</td>
+      </tr>
+      <tr>
+        <td>
+          <span class="summary-item-label">Contract number</span>
+          <span class="summary-item-value">
+            {{ contract.contract_number }}
+          </span>
+        </td>
+        <td>
+          <span class="summary-item-label">Status</span>
+          <span class="summary-item-value">
+            {{ contract.status | replace("_", " ") | title }}
+          </span>
+        </td>
+      </tr>
+
+      <tr>
+        <td class="summary-category" colspan="2">Parties</td>
+      </tr>
+      <tr>
+        <td>
+          <span class="summary-item-label">Client</span>
+          <span class="summary-item-value">
+            {{ contract.client_name }}
+          </span>
+        </td>
+
+        <td>
+          <span class="summary-item-label">Contractor</span>
+          <span class="summary-item-value">
+            {{ contract.contractor_name }}
+          </span>
+        </td>
+      </tr>
+
+      <tr>
+        <td class="summary-category" colspan="2">Engagement</td>
+      </tr>
+      <tr>
+        <td>
+          <span class="summary-item-label">Job</span>
+          <span class="summary-item-value">
+            {{ contract.job_title }}
+          </span>
+        </td>
+
+        <td>
+          <span class="summary-item-label">Created on</span>
+          <span class="summary-item-value">
+            {{ contract.created_at.strftime("%d.%m.%Y.") }}
+          </span>
+        </td>
+      </tr>
+
+      <tr>
+        <td>
+          <span class="summary-item-label">Duration</span>
+          <span class="summary-item-value">
+            {{ contract.duration }} days
+          </span>
+        </td>
+
+        <td>
+          <span class="summary-item-label">Expected workload</span>
+          <span class="summary-item-value">
+            {{ contract.hours_per_week }} hours per week
+          </span>
+        </td>
+      </tr>
+
+      <tr>
+        <td class="summary-category" colspan="2">Compensation</td>
+      </tr>
+      <tr>
+        <td>
+          <span class="summary-item-label">Budget type</span>
+          <span class="summary-item-value">
+            {{ contract.budget_type | title }}
+          </span>
+        </td>
+
+        <td>
+          <span class="summary-item-label">
+            {% if contract.budget_type == "fixed" %}Total compensation{% else %}Hourly rate{% endif %}
+          </span>
+          <span class="summary-item-value">
+            {{ "%.2f"|format(contract.budget_amount) }}
+            {{ contract.currency }}{% if contract.budget_type != "fixed" %} / hour{% endif %}
+          </span>
+        </td>
+      </tr>
+      {% if contract.budget_type != "fixed" %}
+      <tr>
+        <td colspan="2">
+          <span class="summary-item-label">Estimated total compensation</span>
+          <span class="summary-item-value">
+            {{ "%.2f"|format(contract.budget_amount * contract.hours_per_week * contract.duration / 7) }}
+            {{ contract.currency }}
+          </span>
+        </td>
+      </tr>
+      {% endif %}
+    </tbody>
+  </table>
+</section>
+
+    <p class="intro">
+      This Agreement is entered into by and between:
+    </p>
+
+    <table class="parties-table">
+      <tbody>
+        <tr>
+          <td>
+            <section class="party-card party-card-accent">
+  <div class="party-card-header">
+    <h2 class="party-title">Client</h2>
+  </div>
+
+  <p class="party-detail">
+    <span class="party-label">Name / business name</span>
+    <span class="party-value">{{ contract.client_name }}</span>
+  </p>
+
+  <p class="party-detail">
+    <span class="party-label">Email</span>
+    <span class="party-value">{{ contract.client_email }}</span>
+  </p>
+
+  <p class="party-detail">
+    <span class="party-label">Phone</span>
+    <span class="party-value">
+      {% if contract.client_phone %}{{ contract.client_phone }}{% else %}<span class="blank-field"></span>{% endif %}
+    </span>
+  </p>
+
+  <p class="party-detail">
+    <span class="party-label">Location</span>
+    <span class="party-value">
+      {% if contract.client_city or contract.client_country %}
+        {% if contract.client_city %}{{ contract.client_city }}{% if contract.client_country %}, {% endif %}{% endif %}
+        {{ contract.client_country }}
+      {% else %}<span class="blank-field"></span>{% endif %}
+    </span>
+  </p>
+</section>
+          </td>
+
+          <td>
+         <section class="party-card party-card-accent">
+  <div class="party-card-header">
+    <h2 class="party-title">Contractor</h2>
+  </div>
+
+  <p class="party-detail">
+    <span class="party-label">Name / business name</span>
+    <span class="party-value">{{ contract.contractor_name }}</span>
+  </p>
+
+  <p class="party-detail">
+    <span class="party-label">Email</span>
+    <span class="party-value">{{ contract.contractor_email }}</span>
+  </p>
+
+  <p class="party-detail">
+    <span class="party-label">Phone</span>
+    <span class="party-value">
+      {% if contract.contractor_phone %}{{ contract.contractor_phone }}{% else %}<span class="blank-field"></span>{% endif %}
+    </span>
+  </p>
+
+  <p class="party-detail">
+    <span class="party-label">Location</span>
+    <span class="party-value">
+      {% if contract.contractor_city or contract.contractor_country %}
+        {% if contract.contractor_city %}{{ contract.contractor_city }}{% if contract.contractor_country %}, {% endif %}{% endif %}
+        {{ contract.contractor_country }}
+      {% else %}<span class="blank-field"></span>{% endif %}
+    </span>
+  </p>
+</section>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p class="joint-name">
+      The Client and the Contractor are hereinafter jointly referred to as the
+      <strong>Parties</strong>.
+    </p>
+
+    <div class="articles">
+      <section class="article">
+        <table class="article-heading">
+          <tbody>
+            <tr>
+              <td class="article-heading-number">
+                <span class="article-number-badge">01</span>
+              </td>
+
+              <td class="article-heading-content">
+                <span class="article-kicker">Article 1</span>
+                <h2 class="article-title">Scope of Work</h2>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="article-content">
+          <p>
+            Under this Agreement, the Client assigns and the Contractor accepts
+            the performance of the following work:
+          </p>
+
+         <ul class="scope-list">
+  <li>
+    <strong>Job title:</strong>
+    {{ contract.job_title }}
+  </li>
+
+  <li>
+    <strong>Job description:</strong>
+    {{ contract.job_description }}
+  </li>
+
+  <li>
+    <strong>Deliverables:</strong>
+    {{ contract.deliverables }}
+  </li>
+
+  <li>
+    <strong>Duration:</strong>
+    {{ contract.duration }} days
+  </li>
+
+  <li>
+    <strong>Expected workload:</strong>
+    {{ contract.hours_per_week }} hours per week
+  </li>
+
+  <li>
+    <strong>Start date:</strong>
+    {% if contract.starts_at %}{{ contract.starts_at.strftime("%d.%m.%Y.") }}{% else %}<span class="blank-field"></span>{% endif %}
+  </li>
+
+  <li>
+    <strong>End date:</strong>
+    {% if contract.ends_at %}{{ contract.ends_at.strftime("%d.%m.%Y.") }}{% else %}<span class="blank-field"></span>{% endif %}
+  </li>
+</ul>
+
+          <p>
+            The Contractor shall perform the agreed work professionally,
+            diligently and in accordance with applicable professional standards
+            and the provisions of this Agreement.
+          </p>
+        </div>
+      </section>
+
+      <section class="article">
+        <table class="article-heading">
+          <tbody>
+            <tr>
+              <td class="article-heading-number">
+                <span class="article-number-badge">02</span>
+              </td>
+
+              <td class="article-heading-content">
+                <span class="article-kicker">Article 2</span>
+                <h2 class="article-title">Completion Deadline</h2>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="article-content">
+          <p>
+            The Contractor shall complete and deliver the agreed work no later
+            than
+            {% if contract.ends_at %}
+              <strong>{{ contract.ends_at.strftime("%d.%m.%Y.") }}</strong>
+            {% else %}
+              <span class="blank-field"></span>
+            {% endif %}.
+          </p>
+
+          <p>
+            If circumstances arise that reasonably prevent completion within the
+            agreed deadline, the Parties may mutually agree on a revised
+            completion date.
+          </p>
+
+          <p>
+            Any change to the deadline shall be effective only if entered and
+            confirmed through the
+            <span class="platform-name">{{ contract.platform_name }}</span>
+            platform or incorporated into a new version of this Agreement.
+          </p>
+        </div>
+      </section>
+
+      <section class="article">
+        <table class="article-heading">
+          <tbody>
+            <tr>
+              <td class="article-heading-number">
+                <span class="article-number-badge">03</span>
+              </td>
+
+              <td class="article-heading-content">
+                <span class="article-kicker">Article 3</span>
+                <h2 class="article-title">Compensation</h2>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="article-content">
+          <p>
+            For the proper completion of the work, the Client shall pay the
+            Contractor gross compensation in the following amount:
+          </p>
+
+          <div class="amount-box">
+            {% if contract.budget_type == "fixed" %}
+              <span class="amount-label">Fixed total compensation</span>
+
+              <span class="amount-primary">
+                {{ "%.2f"|format(contract.budget_amount) }}
+                {{ contract.currency }}
+              </span>
+            {% else %}
+              <span class="amount-label">Hourly rate</span>
+
+              <span class="amount-primary">
+                {{ "%.2f"|format(contract.budget_amount) }}
+                {{ contract.currency }} / hour
+              </span>
+
+              <span class="amount-words">
+                Expected workload:
+                {{ contract.hours_per_week }} hours per week for
+                {{ contract.duration }} days.
+              </span>
+
+              <span class="amount-estimate-label">
+                Estimated total compensation
+              </span>
+              <span class="amount-estimate">
+                {{ "%.2f"|format(contract.budget_amount * contract.hours_per_week * contract.duration / 7) }}
+                {{ contract.currency }}
+              </span>
+            {% endif %}
+          </div>
+
+         <div class="payment-detail">
+  Payment for this engagement shall be processed exclusively through the
+  <strong>{{ contract.platform_name }}</strong> platform using
+  <strong>Stripe</strong> as the authorized payment processor.
+
+  The Contractor acknowledges that payouts are issued through the platform's
+  payment flow following successful completion of the work and confirmation by
+  the Parties.
+</div>
+        </div>
+      </section>
+
+      <section class="article">
+        <table class="article-heading">
+          <tbody>
+            <tr>
+              <td class="article-heading-number">
+                <span class="article-number-badge">04</span>
+              </td>
+
+              <td class="article-heading-content">
+                <span class="article-kicker">Article 4</span>
+                <h2 class="article-title">
+                  Payment Method and Deadline
+                </h2>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="article-content">
+          <p>
+The Client shall pay the agreed compensation exclusively through the
+<strong>{{ contract.platform_name }}</strong> platform.
+
+All payments are securely processed using
+<strong>Stripe</strong>. The Contractor will receive payment through the
+platform's payout process after the work has been confirmed as completed by the
+Parties, unless otherwise required by applicable law.
+</p>
+
+<p>
+The Parties agree not to settle payments directly outside the platform in
+relation to this Agreement unless expressly permitted by applicable law or the
+platform's Terms of Service.
+</p>
+
+        
+        </div>
+      </section>
+
+      <section class="article">
+        <table class="article-heading">
+          <tbody>
+            <tr>
+              <td class="article-heading-number">
+                <span class="article-number-badge">05</span>
+              </td>
+
+              <td class="article-heading-content">
+                <span class="article-kicker">Article 5</span>
+                <h2 class="article-title">
+                  Rights and Obligations of the Parties
+                </h2>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="article-content">
+          <p><strong>The Contractor shall:</strong></p>
+
+          <ul>
+            <li>perform the agreed work professionally and diligently;</li>
+
+            <li>
+              comply with the agreed scope of work and completion deadline;
+            </li>
+
+            <li>
+              promptly notify the Client of any circumstances that may affect
+              the performance of the work;
+            </li>
+
+            <li>
+              allow the Client to review the progress of the work where
+              appropriate to the nature of the engagement.
+            </li>
+          </ul>
+
+          <p><strong>The Client shall:</strong></p>
+
+          <ul>
+            <li>
+              provide the Contractor with the information, documents and
+              materials required to perform the agreed work;
+            </li>
+
+            <li>
+              respond promptly to reasonable requests from the Contractor;
+            </li>
+
+            <li>
+              confirm proper completion of the work or report identified
+              defects without undue delay;
+            </li>
+
+            <li>
+              pay the agreed compensation within the agreed deadline.
+            </li>
+          </ul>
+
+          <p>
+            The Client may monitor the progress of the work and provide
+            instructions that do not alter the subject matter, scope,
+            compensation or other material terms of this Agreement.
+          </p>
+        </div>
+      </section>
+
+      <section class="article">
+        <table class="article-heading">
+          <tbody>
+            <tr>
+              <td class="article-heading-number">
+                <span class="article-number-badge">06</span>
+              </td>
+
+              <td class="article-heading-content">
+                <span class="article-kicker">Article 6</span>
+                <h2 class="article-title">
+                  Defects in the Completed Work
+                </h2>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="article-content">
+          <p>
+            If, during performance or after delivery, the Client determines
+            that the work has not been completed in accordance with this
+            Agreement, the Client shall promptly notify the Contractor and
+            allow a reasonable period for the identified defects to be
+            corrected.
+          </p>
+
+          <p>
+            The notice of defects must contain a sufficiently clear
+            description of the identified issue and must be recorded through
+            the
+            <span class="platform-name">{{ contract.platform_name }}</span>
+            platform.
+          </p>
+
+          <p>
+            If the Contractor fails to correct the identified defects within
+            the allowed period, the Client may unilaterally terminate this
+            Agreement.
+          </p>
+
+          <p>
+            If this Agreement is terminated due to uncorrected defects, the
+            Contractor shall not be entitled to the agreed compensation, unless
+            mandatory applicable law provides otherwise.
+          </p>
+        </div>
+      </section>
+
+      <section class="article">
+        <table class="article-heading">
+          <tbody>
+            <tr>
+              <td class="article-heading-number">
+                <span class="article-number-badge">07</span>
+              </td>
+
+              <td class="article-heading-content">
+                <span class="article-kicker">Article 7</span>
+                <h2 class="article-title">
+                  Communication and Amendments
+                </h2>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="article-content">
+          <p>
+            The Parties may communicate through or outside the
+            <span class="platform-name">{{ contract.platform_name }}</span>
+            platform.
+          </p>
+
+          <p>
+            Changes to the agreed terms, including the price, completion
+            deadline, description and scope of work, payment method or any
+            other material term, shall be effective only if they are entered
+            and confirmed through the
+            <span class="platform-name">{{ contract.platform_name }}</span>
+            platform or incorporated into a new version of this Agreement.
+          </p>
+
+          <p>
+            Oral arrangements, telephone conversations, email messages or any
+            other communication outside the platform shall not, by themselves,
+            amend this Agreement.
+          </p>
+
+          <p>
+            In the event of any inconsistency between the Parties'
+            communications and this Agreement, the latest version of the
+            Agreement confirmed by both Parties through the
+            <span class="platform-name">{{ contract.platform_name }}</span>
+            platform shall prevail.
+          </p>
+        </div>
+      </section>
+
+      <section class="article">
+        <table class="article-heading">
+          <tbody>
+            <tr>
+              <td class="article-heading-number">
+                <span class="article-number-badge">08</span>
+              </td>
+
+              <td class="article-heading-content">
+                <span class="article-kicker">Article 8</span>
+                <h2 class="article-title">
+                  Role of the {{ contract.platform_name }} Platform
+                </h2>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="article-content">
+        <p>
+The <span class="platform-name">{{ contract.platform_name }}</span> platform facilitates
+secure payment processing through <strong>Stripe</strong>. While the platform
+coordinates payment authorization, confirmation and payout workflows, all
+financial transactions are processed by Stripe in accordance with its applicable
+terms and regulatory requirements.
+</p>
+
+          <div class="notice-box">
+            <h3 class="notice-box-title">Platform status</h3>
+
+            <p>
+              The
+              <span class="platform-name">{{ contract.platform_name }}</span>
+              platform is not a party to this Agreement and is not an employer,
+              agent, principal, Contractor or Client.
+            </p>
+          </div>
+
+          <p>
+            The platform does not guarantee and shall not be responsible for:
+          </p>
+
+          <ul>
+            <li>
+              the identity, qualifications or capability of either Party;
+            </li>
+
+            <li>
+              the performance of obligations under this Agreement;
+            </li>
+
+            <li>
+              the quality, legality or suitability of the completed work;
+            </li>
+
+            <li>compliance with the agreed deadlines;</li>
+
+            <li>
+              the accuracy of information entered by the Parties;
+            </li>
+
+            <li>
+              the content of communications between the Parties;
+            </li>
+
+            <li>
+              any damage, loss or dispute arising during or after the
+              performance of this Agreement.
+            </li>
+          </ul>
+
+          <p>
+            The Client and the Contractor are solely responsible for all
+            rights, obligations, claims and liabilities arising from this
+            Agreement.
+          </p>
+<p>
+  The <span class="platform-name">{{ contract.platform_name }}</span> platform facilitates
+  the creation and management of this Agreement, communication between the
+  Parties, digital confirmations and payment processing through
+  <strong>Stripe</strong>. Except as expressly required by applicable law, the
+  platform is not responsible for the performance, quality, legality or outcome
+  of the services provided under this Agreement and does not itself hold client
+  funds or provide banking services.
+</p>
+        </div>
+      </section>
+
+      <section class="article">
+        <table class="article-heading">
+          <tbody>
+            <tr>
+              <td class="article-heading-number">
+                <span class="article-number-badge">09</span>
+              </td>
+
+              <td class="article-heading-content">
+                <span class="article-kicker">Article 9</span>
+                <h2 class="article-title">Entire Agreement</h2>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="article-content">
+          <p>
+            This Agreement constitutes the entire agreement between the
+            Parties concerning its subject matter and supersedes all prior
+            oral, written or electronic arrangements relating to the same
+            subject matter.
+          </p>
+
+          <p>
+            By confirming this Agreement, both Parties acknowledge that they
+            have read and understood its contents, understand the rights and
+            obligations arising from it and accept it in full.
+          </p>
+        </div>
+      </section>
+
+      <section class="article">
+        <table class="article-heading">
+          <tbody>
+            <tr>
+              <td class="article-heading-number">
+                <span class="article-number-badge">10</span>
+              </td>
+
+              <td class="article-heading-content">
+                <span class="article-kicker">Article 10</span>
+                <h2 class="article-title">Final Provisions</h2>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="article-content">
+          <p>
+            Any matters not governed by this Agreement shall be subject to the
+            applicable laws of the Republic of Croatia, including the Croatian
+            Obligations Act.
+          </p>
+
+          <p>
+            The Parties shall attempt to resolve any dispute arising from this
+            Agreement amicably.
+          </p>
+
+          <p>
+            If a dispute cannot be resolved amicably, the court having
+            subject-matter jurisdiction in
+            {% if contract.client_city %}
+              <strong>{{ contract.client_city }}</strong>
+            {% else %}
+              <span class="blank-field"></span>
+            {% endif %}
+            shall have jurisdiction, unless the Parties validly agree
+            otherwise.
+          </p>
+
+          <p>
+            This Agreement is executed electronically and shall be deemed
+            concluded when confirmed by both Parties through the
+            <span class="platform-name">{{ contract.platform_name }}</span>
+            platform.
+          </p>
+
+          <p>
+            The electronic version of this Agreement recorded on the platform
+            shall be considered the original, and each Party may download its
+            own copy in PDF format.
+          </p>
+        </div>
+      </section>
+    </div>
+
+    <section class="signature-section">
+      <h2 class="signature-section-title">Confirmation by the Parties</h2>
+
+      <p class="signature-section-description">
+        By signing or digitally confirming this document, each Party accepts
+        the terms of this Agreement.
+      </p>
+
+      <table class="signatures">
+        <tbody>
+          <tr>
+            <td>
+              <div class="signature-role">Client</div>
+
+              <div class="signature-name">
+                {{ contract.client_name }}
+              </div>
+
+              <div class="signature-image-wrapper">
+                {% if contract.client_signature_url %}
+                  <img
+                    class="signature-image"
+                    src="{{ contract.client_signature_url }}"
+                    alt="Client's digital signature"
+                  />
+                {% else %}
+                  <div class="signature-placeholder"></div>
+                {% endif %}
+              </div>
+
+              <div class="signature-line">
+                Signature / digital confirmation
+              </div>
+
+              <div class="signature-meta">
+                Confirmation date:
+                {% if contract.client_signed_at %}
+                  {{ contract.client_signed_at.strftime("%d.%m.%Y. %H:%M") }}
+                {% else %}
+                  Not yet signed
+                {% endif %}
+              </div>
+            </td>
+
+            <td>
+              <div class="signature-role">Contractor</div>
+
+              <div class="signature-name">
+                {{ contract.contractor_name }}
+              </div>
+
+              <div class="signature-image-wrapper">
+                {% if contract.contractor_signature_url %}
+                  <img
+                    class="signature-image"
+                    src="{{ contract.contractor_signature_url }}"
+                    alt="Contractor's digital signature"
+                  />
+                {% else %}
+                  <div class="signature-placeholder"></div>
+                {% endif %}
+              </div>
+
+              <div class="signature-line">
+                Signature / digital confirmation
+              </div>
+
+              <div class="signature-meta">
+                Confirmation date:
+                {% if contract.contractor_signed_at %}
+                  {{ contract.contractor_signed_at.strftime("%d.%m.%Y. %H:%M") }}
+                {% else %}
+                  Not yet signed
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <footer class="document-footer">
+      <div>
+        <strong>Contract:</strong>
+        {{ contract.contract_number }}
+
+        <span class="footer-separator">•</span>
+
+        <strong>Job ID:</strong>
+        {{ contract.job_id }}
+
+        <span class="footer-separator">•</span>
+
+        <strong>Application ID:</strong>
+        {{ contract.application_id }}
+
+        {% if contract.negotiation_id %}
+          <span class="footer-separator">•</span>
+
+          <strong>Negotiation ID:</strong>
+          {{ contract.negotiation_id }}
+        {% endif %}
+      </div>
+
+      <div>
+        This document was generated through the
+        {{ contract.platform_name }} platform.
+      </div>
+    </footer>
+  </main>
+</body>
+</html>

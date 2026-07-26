@@ -1,12 +1,19 @@
 import os
 import smtplib
+from pathlib import Path
+
+from dotenv import load_dotenv
+
 from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from html import escape
 
+
+load_dotenv(Path(__file__).resolve().parents[2] / ".env")
+
 SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
-SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
+SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 SMTP_USER = os.getenv("SMTP_USER", "")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
 
@@ -85,5 +92,13 @@ def send_contract_email(
             server.starttls()
             server.login(SMTP_USER, SMTP_PASSWORD)
             server.sendmail(SMTP_USER, to_email, msg.as_string())
+    except smtplib.SMTPResponseException as exc:
+      error = exc.smtp_error.decode(errors="replace")
+      raise ContractEmailError(
+          f"Google SMTP error {exc.smtp_code}: {error}"
+      ) from exc
+
     except (OSError, smtplib.SMTPException) as exc:
-        raise ContractEmailError("The email could not be sent.") from exc
+        raise ContractEmailError(
+            f"SMTP connection error: {type(exc).__name__}: {exc}"
+        ) from exc

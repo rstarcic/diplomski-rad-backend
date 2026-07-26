@@ -1,88 +1,30 @@
-import os
-import secrets
 import asyncio
-from pathlib import Path
 
-from database import get_db
-from dependencies import get_current_user_id
-from email_service import ContractEmailError, send_contract_email
-from dotenv import load_dotenv
-from fastapi import APIRouter, Depends, Header, HTTPException, status
-from fastapi.responses import HTMLResponse, Response
-from integrations import notify_job_contract_activated
-from schemas import (
-    ContractCreateRequest,
+from app.contracts.schemas import (
     ContractEmailResponse,
     ContractResponse,
     ContractSignatureRequest,
 )
-from service import (
+from app.contracts.service import (
     authorize_contract_party,
-    create_contract,
     get_contract_by_application_id,
     get_contract_by_id,
     render_contract_html,
     render_contract_pdf,
     sign_contract,
-    update_contract_status_by_job,
 )
+from app.documents.email_service import ContractEmailError, send_contract_email
+from app.integrations.core_client import notify_job_contract_activated
+from database import get_db
+from dependencies import get_current_user_id
+from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import HTMLResponse, Response
 from sqlalchemy.orm import Session
 
-load_dotenv(Path(__file__).resolve().parent / ".env", override=False)
-INTERNAL_SECRET = os.getenv("INTERNAL_SECRET", "")
-
-
-def _verify_internal(x_internal_secret: str = Header(...)) -> None:
-    if not INTERNAL_SECRET:
-        raise HTTPException(503, detail="Internal API authentication is not configured.")
-    if not secrets.compare_digest(x_internal_secret, INTERNAL_SECRET):
-        raise HTTPException(403, detail="Forbidden")
-
-
-internal_router = APIRouter(
-    prefix="/internal/contracts",
-    tags=["internal-contracts"],
-    dependencies=[Depends(_verify_internal)],
+router = APIRouter(
+    prefix="/contracts",
+    tags=["contracts"],
 )
-
-
-@internal_router.post("", response_model=ContractResponse, status_code=status.HTTP_201_CREATED)
-def create_contract_endpoint(
-    request: ContractCreateRequest,
-    db: Session = Depends(get_db),
-):
-    return create_contract(db=db, request=request)
-
-
-@internal_router.patch(
-    "/job/{job_id}/complete",
-    response_model=ContractResponse,
-)
-def complete_contract_endpoint(
-    job_id: int,
-    db: Session = Depends(get_db),
-):
-    return update_contract_status_by_job(
-        db=db,
-        job_id=job_id,
-        action="complete",
-    )
-
-
-@internal_router.patch(
-    "/job/{job_id}/cancel",
-    response_model=ContractResponse,
-)
-def cancel_contract_endpoint(
-    job_id: int,
-    db: Session = Depends(get_db),
-):
-    return update_contract_status_by_job(
-        db=db,
-        job_id=job_id,
-        action="cancel",
-    )
-
 
 router = APIRouter(prefix="/contracts", tags=["contracts"])
 
@@ -101,7 +43,7 @@ def get_contract_by_application_endpoint(
 ):
     contract = get_contract_by_application_id(db=db, application_id=application_id)
     authorize_contract_party(contract, user_id)
-    return contract
+    return ContractResponse.model_validate(contract)
 
 
 @router.get("/{contract_id}", response_model=ContractResponse)
@@ -163,7 +105,7 @@ async def email_contract_endpoint(
     db: Session = Depends(get_db),
 ):
     contract = _authorized_contract(contract_id, user_id, db)
-    if contract.status != "active":
+    if contract.status not in {"active", "completed"}:
         raise HTTPException(
             409,
             detail={
@@ -180,7 +122,13 @@ async def email_contract_endpoint(
         recipient_email = contract.contractor_email
         recipient_name = contract.contractor_name
 
-    pdf_content = render_contract_pdf(contract)
+    try:
+        pdf_content = render_contract_pdf(contract)
+    except Exception:
+        return {
+            "message": "The contract is ready, but PDF generation is currently unavailable."
+        }
+
     try:
         await asyncio.to_thread(
             send_contract_email,
@@ -191,17 +139,20 @@ async def email_contract_endpoint(
             client_name=contract.client_name,
             contractor_name=contract.contractor_name,
             recipient_name=recipient_name,
-            starts_at=(contract.starts_at.strftime("%d.%m.%Y.") if contract.starts_at else None),
-            ends_at=(contract.ends_at.strftime("%d.%m.%Y.") if contract.ends_at else None),
+            starts_at=(
+                contract.starts_at.strftime("%d.%m.%Y.") if contract.starts_at else None
+            ),
+            ends_at=(
+                contract.ends_at.strftime("%d.%m.%Y.") if contract.ends_at else None
+            ),
         )
-    except ContractEmailError:
+    except ContractEmailError as exc:
         raise HTTPException(
-            502,
+            status_code=503,
             detail={
-                "code": "contract_email_failed",
-                "message": "The contract could not be sent. Please try again.",
-                "field": None,
+                "code": "email_delivery_failed",
+                "message": str(exc),
             },
-        )
+        ) from exc
 
     return {"message": "The contract has been sent to your email."}

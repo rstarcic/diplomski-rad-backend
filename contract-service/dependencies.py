@@ -1,14 +1,28 @@
 import os
+import secrets
 from pathlib import Path
 
 from dotenv import load_dotenv
-from fastapi import HTTPException, Request
+from fastapi import Header, HTTPException, Request
 from jose import ExpiredSignatureError, JWTError, jwt
 
-load_dotenv(Path(__file__).resolve().parent / ".env", override=False)
+load_dotenv(
+    Path(__file__).resolve().parent / ".env",
+    override=False,
+)
 
 SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
+INTERNAL_SECRET = os.getenv("INTERNAL_SECRET", "")
+
+
+def _verify_internal(x_internal_secret: str = Header(...)) -> None:
+    if not INTERNAL_SECRET:
+        raise HTTPException(
+            503, detail="Internal API authentication is not configured."
+        )
+    if not secrets.compare_digest(x_internal_secret, INTERNAL_SECRET):
+        raise HTTPException(403, detail="Forbidden")
 
 
 def _auth_error(status_code: int, code: str, message: str) -> None:
@@ -23,7 +37,9 @@ def get_current_user_id(request: Request) -> int:
     if not access_token:
         _auth_error(401, "not_authenticated", "Authentication is required.")
     if not SECRET_KEY:
-        _auth_error(503, "authentication_unavailable", "Authentication is not configured.")
+        _auth_error(
+            503, "authentication_unavailable", "Authentication is not configured."
+        )
 
     try:
         payload = jwt.decode(access_token, SECRET_KEY, algorithms=[ALGORITHM])
@@ -36,4 +52,3 @@ def get_current_user_id(request: Request) -> int:
         return int(payload["sub"])
     except (KeyError, TypeError, ValueError):
         _auth_error(401, "invalid_token", "The access token is invalid.")
-
