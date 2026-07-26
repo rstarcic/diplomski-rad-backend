@@ -8,3 +8,5 @@ python-multipart==0.0.32
 psycopg2-binary==2.9.12
 email-validator==2.3.0
 python-jose==3.5.0
+python-dotenv==1.2.2
+aiohttp==3.14.1

@@ -100,7 +100,9 @@ def update_my_profile_page(
     if not profile:
         return None
 
-    for field, value in data.profile.model_dump(exclude_unset=True).items():
+    profile_updates = data.profile.model_dump(exclude_unset=True)
+
+    for field, value in profile_updates.items():
         setattr(profile, field, value)
 
     if profile_picture_blob is not None:

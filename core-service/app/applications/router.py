@@ -97,12 +97,11 @@ def get_job_applications_endpoint(
     return applications
 
 
-# TODO dodati za payment i contract
 @router.get(
     "/applications/{application_id}/me",
     response_model=MyApplicationDetailResponse,
 )
-def get_my_application_detail_endpoint(
+async def get_my_application_detail_endpoint(
     application_id: int,
     db: Session = Depends(get_db),
     current_user: Profile = Depends(get_current_user),
@@ -110,7 +109,7 @@ def get_my_application_detail_endpoint(
     if current_user.role != "contractor":
         raise_core_error("forbidden")
 
-    application = get_my_application_detail(
+    application = await get_my_application_detail(
         db=db,
         contractor_id=current_user.user_id,
         application_id=application_id,
@@ -126,7 +125,7 @@ def get_my_application_detail_endpoint(
     "/jobs/{job_id}/applications/{application_id}",
     response_model=JobApplicationDetailResponse,
 )
-def get_job_application_detail_endpoint(
+async def get_job_application_detail_endpoint(
     job_id: int,
     application_id: int,
     db: Session = Depends(get_db),
@@ -135,7 +134,7 @@ def get_job_application_detail_endpoint(
     if current_user.role != "client":
         raise_core_error("forbidden")
 
-    application = get_job_application_detail(
+    application = await get_job_application_detail(
         db=db,
         client_id=current_user.user_id,
         job_id=job_id,

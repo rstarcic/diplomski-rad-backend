@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import Literal
 
+from app.integrations.schemas import ContractSummary, PaymentSummary
 from app.jobs.schemas import JobResponse
 from app.negotiations.schemas import NegotiationEditResponse, NegotiationSummaryResponse
 from app.profiles.schemas import ClientPublicProfile, ContractorPublicProfile
@@ -85,9 +86,9 @@ class JobApplicationDetailResponse(BaseModel):
     contractor: ContractorPublicProfile
     reviews: TargetReviewsResponse
     negotiation: NegotiationSummaryResponse | None = None
-    negotiationUpdates: list[NegotiationEditResponse]
-    contract: None = None  # TODO
-    payment: None = None  # TODO
+    negotiation_updates: list[NegotiationEditResponse]
+    contract: ContractSummary | None = None
+    payment: PaymentSummary | None = None
 
 
 # Contractor's own applications list
@@ -122,7 +123,6 @@ class MyApplicationItemResponse(BaseModel):
 
 # Contractor's own application details
 
-
 class MyApplicationDetailResponse(BaseModel):
     application: MyApplicationSummary
     job: JobResponse
@@ -130,9 +130,8 @@ class MyApplicationDetailResponse(BaseModel):
     reviews: TargetReviewsResponse
     negotiation: NegotiationSummaryResponse | None = None
     negotiation_updates: list[NegotiationEditResponse]
-    contract: None = None  # TODO
-    payment: None = None  # TODO
-
+    contract: ContractSummary | None = None
+    payment: PaymentSummary | None = None
 
 class AcceptTermsResponse(BaseModel):
     message: str

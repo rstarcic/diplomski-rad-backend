@@ -31,11 +31,23 @@ CORE_ERRORS = {
         "message": "The contract status could not be synchronized.",
         "field": "status",
     },
+    "contract_summary_fetch_failed": {
+        "status_code": 502,
+        "code": "contract_summary_fetch_failed",
+        "message": "We couldn't load the contract details. Please try again.",
+        "field": None,
+    },
     "payment_creation_failed": {
         "status_code": 502,
         "code": "payment_creation_failed",
         "message": "The pending payment could not be created.",
         "field": "status",
+    },
+    "payment_summary_fetch_failed": {
+        "status_code": 502,
+        "code": "payment_summary_fetch_failed",
+        "message": "We couldn't load the payment details. Please try again.",
+        "field": None,
     },
     "payment_service_timeout": {
         "status_code": 504,

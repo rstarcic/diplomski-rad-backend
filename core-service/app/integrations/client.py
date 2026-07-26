@@ -6,11 +6,13 @@ import aiohttp
 from app.integrations.schemas import (
     ContractCreateRequest,
     ContractServiceResponse,
+    ContractSummary,
+    PaymentSummary,
 )
 from errors import raise_core_error
 from dotenv import load_dotenv
 
-load_dotenv(Path(__file__).resolve().parents[2] / ".env", override=True)
+load_dotenv(Path(__file__).resolve().parents[2] / ".env", override=False)
 
 CONTRACT_SERVICE_URL = os.getenv(
     "CONTRACT_SERVICE_URL",
@@ -89,22 +91,73 @@ async def update_contract_status_for_job(job_id: int, action: str) -> dict:
         raise_core_error("contract_service_unavailable")
 
 
-async def create_pending_payment(job_id: int, application_id: int) -> dict:
+async def create_pending_payment(contract_id: int) -> dict:
     timeout = aiohttp.ClientTimeout(total=10)
 
     try:
         async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.post(
-                f"{PAYMENT_SERVICE_URL}/payments/internal/jobs/{job_id}/pending",
-                json={"application_id": application_id},
+                f"{PAYMENT_SERVICE_URL}/internal/payments/pending",
+                json={"contract_id": contract_id},
                 headers=_internal_headers(),
             ) as response:
                 if response.status >= 400:
                     raise_core_error("payment_creation_failed")
+
                 return await response.json()
     except asyncio.TimeoutError:
         raise_core_error("payment_service_timeout")
     except aiohttp.ClientError:
         raise_core_error("payment_service_unavailable")
 
+async def get_contract_summary(
+    application_id: int,
+) -> ContractSummary | None:
+    timeout = aiohttp.ClientTimeout(total=10)
 
+    try:
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.get(
+                f"{CONTRACT_SERVICE_URL}/internal/contracts/application/{application_id}",
+                headers=_internal_headers(),
+            ) as response:
+                if response.status == 404:
+                    return None
+
+                if response.status >= 400:
+                    raise_core_error("contract_summary_fetch_failed")
+
+                return ContractSummary.model_validate(
+                    await response.json()
+                )
+    except asyncio.TimeoutError:
+        raise_core_error("contract_service_timeout")
+    except aiohttp.ClientError:
+        raise_core_error("contract_service_unavailable")
+
+
+async def get_payment_summary(
+    application_id: int,
+) -> PaymentSummary | None:
+    timeout = aiohttp.ClientTimeout(total=10)
+
+    try:
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.get(
+                f"{PAYMENT_SERVICE_URL}/internal/payments/application/{application_id}",
+                headers=_internal_headers(),
+            ) as response:
+                if response.status == 404:
+                    return None
+
+                if response.status >= 400:
+                    raise_core_error("payment_summary_fetch_failed")
+
+                return PaymentSummary.model_validate(
+                    await response.json()
+                )
+
+    except asyncio.TimeoutError:
+        raise_core_error("payment_service_timeout")
+    except aiohttp.ClientError:
+        raise_core_error("payment_service_unavailable")

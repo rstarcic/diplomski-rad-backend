@@ -389,8 +389,12 @@ async def mark_job_completed(
     if job.status != "done_by_contractor":
         raise_core_error("job_cannot_be_completed")
 
-    await update_contract_status_for_job(job.id, "complete")
-    # await create_pending_payment(job.id, application.id)  # TODO
+    contract = await update_contract_status_for_job(job.id, "complete")
+    contract_id = contract.get("id")
+    if contract_id is None:
+        raise_core_error("invalid_contract_response")
+
+    await create_pending_payment(contract_id) 
     job.status = "completed_by_client"
 
     try:

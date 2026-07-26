@@ -134,12 +134,6 @@ class JobUpdate(JobBase):
 
 # Full job responses
 
-
-class JobCreated(BaseModel):
-    job_id: int
-    status: JobStatus
-
-
 class JobResponse(BaseModel):
     id: int
     client_id: int

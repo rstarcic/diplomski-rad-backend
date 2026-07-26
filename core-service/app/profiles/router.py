@@ -1,6 +1,4 @@
-import os
-
-from app.dependencies import get_current_user
+from app.dependencies import _verify_internal, get_current_user
 from app.profiles.models import Profile
 from app.profiles.schemas import (
     ClientPublicProfileResponse,
@@ -20,17 +18,10 @@ from app.profiles.services.public_profile_service import (
 )
 from database import get_db
 from errors import raise_core_error
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
 router = APIRouter()
-
-INTERNAL_SECRET = os.getenv("INTERNAL_SECRET", "")
-
-
-def _verify_internal(x_internal_secret: str = Header(...)):
-    if INTERNAL_SECRET and x_internal_secret != INTERNAL_SECRET:
-        raise HTTPException(status_code=403, detail="Forbidden")
 
 
 @router.post("/init", response_model=ProfileResponse, status_code=201)

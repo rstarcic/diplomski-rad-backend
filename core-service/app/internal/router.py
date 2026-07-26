@@ -1,29 +1,41 @@
-import os
-import secrets
-
+from app.dependencies import _verify_internal
 from app.jobs.models import Job
+from app.profiles.models import Profile
+from app.profiles.schemas import InternalContractorProfileResponse
 from database import get_db
 from dotenv import load_dotenv
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 load_dotenv(override=False)
 
-INTERNAL_SECRET = os.getenv("INTERNAL_SECRET", "")
-router = APIRouter(prefix="/internal", tags=["internal"])
 
-
-def verify_internal(x_internal_secret: str = Header(...)) -> None:
-    if not INTERNAL_SECRET:
-        raise HTTPException(503, detail="Internal API authentication is not configured.")
-    if not secrets.compare_digest(x_internal_secret, INTERNAL_SECRET):
-        raise HTTPException(403, detail="Forbidden")
-
-
-@router.patch(
-    "/jobs/{job_id}/contract-activated",
-    dependencies=[Depends(verify_internal)],
+router = APIRouter(
+    prefix="/internal",
+    tags=["internal"],
+    dependencies=[Depends(_verify_internal)],
 )
+
+
+@router.get(
+    "/profiles/{user_id}/contractor",
+    response_model=InternalContractorProfileResponse,
+)
+def get_contractor_profile_for_internal_service(
+    user_id: int,
+    db: Session = Depends(get_db),
+):
+    profile = (
+        db.query(Profile)
+        .filter(Profile.user_id == user_id, Profile.role == "contractor")
+        .first()
+    )
+    if profile is None:
+        raise HTTPException(404, detail="Contractor profile not found.")
+    return profile
+
+
+@router.patch("/jobs/{job_id}/contract-activated")
 def activate_job_from_contract(
     job_id: int,
     db: Session = Depends(get_db),
@@ -32,7 +44,6 @@ def activate_job_from_contract(
     if job is None:
         raise HTTPException(404, detail="Job not found.")
 
-    # Idempotent: a repeated callback has the same result.
     if job.status == "in_progress":
         return {"job_id": job.id, "status": job.status}
     if job.status != "awaiting_contract":
@@ -49,4 +60,5 @@ def activate_job_from_contract(
         db.rollback()
         raise
 
+    return {"job_id": job.id, "status": job.status}
     return {"job_id": job.id, "status": job.status}

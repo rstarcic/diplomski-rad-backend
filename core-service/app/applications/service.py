@@ -17,6 +17,8 @@ from app.applications.schemas import (
     MyApplicationJobSummary,
     MyApplicationSummary,
 )
+from app.integrations.client import get_contract_summary, get_payment_summary
+from app.integrations.schemas import ContractPartySummary, ContractPlatformSummary
 from app.jobs.models import Job
 from app.integrations.client import update_contract_status_for_job
 from app.jobs.schemas import JobResponse
@@ -307,7 +309,7 @@ def get_my_applications(
     ]
 
 
-def get_my_application_detail(
+async def get_my_application_detail(
     db: Session,
     contractor_id: int,
     application_id: int,
@@ -354,6 +356,44 @@ def get_my_application_detail(
             negotiation_updates=negotiation_updates,
         )
 
+    contract = await get_contract_summary(application_id)
+
+    if contract is not None:
+        if not contract.platform_name:
+            contract.platform_name = "WorkLink"
+        if not contract.client_name:
+            contract.client_name = client.full_name
+        if not contract.client:
+            contract.client = ContractPartySummary(
+                user_id=client.user_id,
+                full_name=client.full_name,
+                email=client.email,
+            )
+
+        contractor_profile = db.scalar(
+            select(Profile).where(Profile.user_id == application.contractor_id)
+        )
+        if contractor_profile is not None:
+            if not contract.contractor_name:
+                contract.contractor_name = contractor_profile.full_name
+            if not contract.contractor:
+                contract.contractor = ContractPartySummary(
+                    user_id=contractor_profile.user_id,
+                    full_name=contractor_profile.full_name,
+                    email=contractor_profile.email,
+                )
+
+        if not contract.platform:
+            contract.platform = ContractPlatformSummary(
+                name=contract.platform_name or "WorkLink"
+            )
+
+    payment = (
+        await get_payment_summary(application_id)
+        if contract is not None
+        else None
+    )
+
     return MyApplicationDetailResponse(
         application=MyApplicationSummary(
             id=application.id,
@@ -383,12 +423,12 @@ def get_my_application_detail(
             NegotiationEditResponse.model_validate(update)
             for update in negotiation_updates
         ],
-        contract=None,
-        payment=None,
+        contract=contract,
+        payment=payment,
     )
 
 
-def get_job_application_detail(
+async def get_job_application_detail(
     db: Session,
     client_id: int,
     job_id: int,
@@ -432,6 +472,13 @@ def get_job_application_detail(
         target_id=contractor.user_id,
     )
 
+    contract = await get_contract_summary(application_id)
+    payment = (
+        await get_payment_summary(application_id)
+        if contract is not None
+        else None
+    )
+
     return JobApplicationDetailResponse(
         application=ApplicationSummaryDetail(
             id=application.id,
@@ -456,12 +503,12 @@ def get_job_application_detail(
             if negotiation is not None
             else None
         ),
-        negotiationUpdates=[
+        negotiation_updates=[
             NegotiationEditResponse.model_validate(update)
             for update in negotiation_updates
         ],
-        contract=None,
-        payment=None,
+        contract=contract,
+        payment=payment,
     )
 
 

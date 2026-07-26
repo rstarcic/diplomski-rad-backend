@@ -1,8 +1,20 @@
 from datetime import datetime
 from typing import Any, Literal
 
+from pydantic import (
+    AliasPath,
+    BaseModel,
+    EmailStr,
+    Field,
+    model_validator,
+)
+
 from app.reviews.schemas import TargetReviewsResponse
-from pydantic import AliasPath, BaseModel, EmailStr, Field, model_validator
+
+
+# =========================================================
+# PROFILE REQUEST SCHEMAS
+# =========================================================
 
 
 class ProfileCreate(BaseModel):
@@ -45,8 +57,11 @@ class ProfilePageUpdate(BaseModel):
             return data
 
         profile_fields = set(ProfileUpdate.model_fields)
+
         profile_data = {
-            field: value for field, value in data.items() if field in profile_fields
+            field: value
+            for field, value in data.items()
+            if field in profile_fields
         }
 
         if not profile_data:
@@ -57,6 +72,29 @@ class ProfilePageUpdate(BaseModel):
             "skills": data.get("skills"),
             "portfolio": data.get("portfolio"),
         }
+
+
+# =========================================================
+# INTERNAL SERVICE SCHEMAS
+# =========================================================
+
+
+class InternalContractorProfileResponse(BaseModel):
+    user_id: int
+    email: EmailStr
+    role: Literal["contractor"]
+    full_name: str | None = None
+    about: str | None = None
+    phone: str | None = None
+    city: str | None = None
+    country: str | None = None
+
+    model_config = {"from_attributes": True}
+
+
+# =========================================================
+# COMMON PROFILE RESPONSE SCHEMAS
+# =========================================================
 
 
 class ProfileResponse(BaseModel):
@@ -97,6 +135,11 @@ class PortfolioItemResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+# =========================================================
+# PRIVATE PROFILE PAGE RESPONSES
+# =========================================================
+
+
 class BaseProfilePageResponse(BaseModel):
     profile: ProfileResponse
     reviews: TargetReviewsResponse
@@ -112,7 +155,15 @@ class ContractorProfilePageResponse(BaseProfilePageResponse):
     portfolio: list[PortfolioItemResponse]
 
 
-ProfilePageResponse = ClientProfilePageResponse | ContractorProfilePageResponse
+ProfilePageResponse = (
+    ClientProfilePageResponse
+    | ContractorProfilePageResponse
+)
+
+
+# =========================================================
+# PUBLIC PROFILE SCHEMAS
+# =========================================================
 
 
 class PublicProfile(BaseModel):

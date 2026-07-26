@@ -1,18 +1,30 @@
 import os
+import secrets
 from pathlib import Path
 
 from app.profiles.models import Profile
 from database import get_db
 from dotenv import load_dotenv
 from errors import raise_core_error
-from fastapi import Depends, Request
+from fastapi import Depends, Header, HTTPException, Request
 from jose import ExpiredSignatureError, JWTError, jwt
 from sqlalchemy.orm import Session
 
-load_dotenv(Path(__file__).resolve().parents[1] / ".env", override=True)
+load_dotenv(Path(__file__).resolve().parents[1] / ".env", override=False)
 
 SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
+
+INTERNAL_SECRET = os.getenv("INTERNAL_SECRET", "")
+
+
+def _verify_internal(x_internal_secret: str = Header(...)) -> None:
+    if not INTERNAL_SECRET:
+        raise HTTPException(
+            503, detail="Internal API authentication is not configured."
+        )
+    if not secrets.compare_digest(x_internal_secret, INTERNAL_SECRET):
+        raise HTTPException(403, detail="Forbidden")
 
 
 def decode_access_token(token: str) -> dict:
