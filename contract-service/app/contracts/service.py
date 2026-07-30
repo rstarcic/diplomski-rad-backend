@@ -26,6 +26,11 @@ template_environment = Environment(
 )
 
 SIGNATURE_DEADLINE = timedelta(days=1)
+SIGNABLE_CONTRACT_STATUSES = {
+    "pending_signatures",
+    "pending_client_signature",
+    "pending_contractor_signature",
+}
 
 
 def _generate_contract_number() -> str:
@@ -275,7 +280,21 @@ def sign_contract(
     user_id: int,
     signature_data_url: str,
 ) -> Contract:
-    contract = get_contract_by_id(db, contract_id)
+    contract = db.scalar(
+        select(Contract)
+        .where(Contract.id == contract_id)
+        .with_for_update()
+    )
+
+    if contract is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Contract not found",
+        )
+
+    _cancel_if_signature_deadline_passed(db, contract)
+
+    authorize_contract_party(contract, user_id)
 
     if contract.status == "cancelled":
         raise HTTPException(
@@ -287,10 +306,20 @@ def sign_contract(
             },
         )
 
+    if contract.status not in SIGNABLE_CONTRACT_STATUSES:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "contract_cannot_be_signed",
+                "message": (
+                    "Only a contract awaiting signatures can be signed."
+                ),
+                "field": "status",
+            },
+        )
+
     signature = _validate_signature_data_url(signature_data_url)
     signed_at = datetime.now(timezone.utc)
-
-    authorize_contract_party(contract, user_id)
 
     if user_id == contract.client_id:
         contract.client_signature_url = signature

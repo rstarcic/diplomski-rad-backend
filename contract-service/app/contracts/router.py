@@ -21,11 +21,6 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import HTMLResponse, Response
 from sqlalchemy.orm import Session
 
-router = APIRouter(
-    prefix="/contracts",
-    tags=["contracts"],
-)
-
 router = APIRouter(prefix="/contracts", tags=["contracts"])
 
 

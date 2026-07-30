@@ -45,16 +45,6 @@ class ContractEmailResponse(BaseModel):
     message: str
 
 
-class ContractPartySummary(BaseModel):
-    user_id: int
-    full_name: str
-    email: str
-
-
-class ContractPlatformSummary(BaseModel):
-    name: str
-
-
 class ContractResponse(BaseModel):
     id: int
     contract_number: str
@@ -65,14 +55,10 @@ class ContractResponse(BaseModel):
     client_id: int
     client_name: str
     client_email: str
-    client: ContractPartySummary
 
     contractor_id: int
     contractor_name: str
     contractor_email: str
-    contractor: ContractPartySummary
-
-    platform: ContractPlatformSummary
 
     job_id: int
     job_title: str
@@ -97,48 +83,3 @@ class ContractResponse(BaseModel):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
-
-    @classmethod
-    def from_contract(cls, contract) -> "ContractResponse":
-        return cls(
-            id=contract.id,
-            contract_number=contract.contract_number,
-            platform_name=contract.platform_name,
-            application_id=contract.application_id,
-            negotiation_id=contract.negotiation_id,
-            client_id=contract.client_id,
-            client_name=contract.client_name,
-            client_email=contract.client_email,
-            client=ContractPartySummary(
-                user_id=contract.client_id,
-                full_name=contract.client_name,
-                email=contract.client_email,
-            ),
-            contractor_id=contract.contractor_id,
-            contractor_name=contract.contractor_name,
-            contractor_email=contract.contractor_email,
-            contractor=ContractPartySummary(
-                user_id=contract.contractor_id,
-                full_name=contract.contractor_name,
-                email=contract.contractor_email,
-            ),
-            platform=ContractPlatformSummary(name=contract.platform_name),
-            job_id=contract.job_id,
-            job_title=contract.job_title,
-            job_description=contract.job_description,
-            budget_amount=contract.budget_amount,
-            budget_type=contract.budget_type,
-            currency=contract.currency,
-            duration=contract.duration,
-            hours_per_week=contract.hours_per_week,
-            deliverables=contract.deliverables,
-            status=contract.status,
-            client_signed_at=contract.client_signed_at,
-            client_signature_url=contract.client_signature_url,
-            contractor_signed_at=contract.contractor_signed_at,
-            contractor_signature_url=contract.contractor_signature_url,
-            starts_at=contract.starts_at,
-            ends_at=contract.ends_at,
-            created_at=contract.created_at,
-            updated_at=contract.updated_at,
-        )

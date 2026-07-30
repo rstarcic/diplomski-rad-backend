@@ -27,7 +27,8 @@ def create_contract_endpoint(
     request: ContractCreateRequest,
     db: Session = Depends(get_db),
 ):
-    return ContractResponse.from_contract(create_contract(db=db, request=request))
+    contract = create_contract(db=db, request=request)
+    return ContractResponse.model_validate(contract)
 
 
 @router.patch("/job/{job_id}/complete", response_model=ContractResponse)
@@ -35,9 +36,12 @@ def complete_contract_endpoint(
     job_id: int,
     db: Session = Depends(get_db),
 ):
-    return ContractResponse.from_contract(
-        update_contract_status_by_job(db=db, job_id=job_id, action="complete")
+    contract = update_contract_status_by_job(
+        db=db,
+        job_id=job_id,
+        action="complete",
     )
+    return ContractResponse.model_validate(contract)
 
 
 @router.patch("/job/{job_id}/cancel", response_model=ContractResponse)
@@ -45,9 +49,12 @@ def cancel_contract_endpoint(
     job_id: int,
     db: Session = Depends(get_db),
 ):
-    return ContractResponse.from_contract(
-        update_contract_status_by_job(db=db, job_id=job_id, action="cancel")
+    contract = update_contract_status_by_job(
+        db=db,
+        job_id=job_id,
+        action="cancel",
     )
+    return ContractResponse.model_validate(contract)
 
 
 @router.get(
@@ -73,7 +80,7 @@ def get_contract_by_application_endpoint(
         db=db,
         application_id=application_id,
     )
-    return ContractResponse.from_contract(contract)
+    return ContractResponse.model_validate(contract)
 
 
 @router.get(
