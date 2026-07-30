@@ -1,10 +1,18 @@
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
+from typing import Literal
 
 from fastapi import HTTPException, status
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.contracts.service import get_contract_by_id
+from app.internal.dashboard_schemas import (
+    ContractDashboardItem,
+    ContractDashboardSummary,
+)
 from app.internal.schemas import ContractPaymentDetailsResponse
+from models import Contract
 
 
 def to_minor_units(amount: float | Decimal) -> int:
@@ -54,4 +62,62 @@ def get_contract_payment_details(
         status=contract.status,
     )
 
-    
+
+def get_contract_dashboard_summary(
+    db: Session,
+    user_id: int,
+    role: Literal["client", "contractor"],
+) -> ContractDashboardSummary:
+    owner_filter = (
+        Contract.client_id == user_id
+        if role == "client"
+        else Contract.contractor_id == user_id
+    )
+    now = datetime.now(timezone.utc)
+    ending_soon = now + timedelta(days=7)
+    pending_statuses = (
+        ("pending_signatures", "pending_client_signature")
+        if role == "client"
+        else ("pending_signatures", "pending_contractor_signature")
+    )
+
+    counts = db.execute(
+        select(
+            func.count(Contract.id).filter(Contract.status == "active"),
+            func.count(Contract.id).filter(
+                Contract.status.in_(("active", "completed"))
+            ),
+            func.count(Contract.id).filter(
+                Contract.status == "active",
+                Contract.ends_at.isnot(None),
+                Contract.ends_at >= now,
+                Contract.ends_at <= ending_soon,
+            ),
+            func.count(Contract.id).filter(
+                Contract.status.in_(pending_statuses)
+            ),
+        ).where(owner_filter)
+    ).one()
+
+    recent = db.scalars(
+        select(Contract)
+        .where(owner_filter)
+        .order_by(Contract.updated_at.desc())
+        .limit(5)
+    ).all()
+
+    return ContractDashboardSummary(
+        active_count=counts[0],
+        signed_count=counts[1],
+        ending_soon_count=counts[2],
+        pending_signature_count=counts[3],
+        recent=[
+            ContractDashboardItem(
+                id=item.id,
+                job_title=item.job_title,
+                status=item.status,
+                updated_at=item.updated_at,
+            )
+            for item in recent
+        ],
+    )

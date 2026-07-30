@@ -7,7 +7,12 @@ from app.integrations.schemas import (
     ContractCreateRequest,
     ContractServiceResponse,
     ContractSummary,
+    PaymentProfileStatus,
     PaymentSummary,
+)
+from app.integrations.dashboard_schemas import (
+    ContractDashboardSummary,
+    PaymentDashboardSummary,
 )
 from errors import raise_core_error
 from dotenv import load_dotenv
@@ -110,6 +115,31 @@ async def create_pending_payment(contract_id: int) -> dict:
     except aiohttp.ClientError:
         raise_core_error("payment_service_unavailable")
 
+
+async def get_payment_profile_status(
+    user_id: int,
+) -> PaymentProfileStatus | None:
+    timeout = aiohttp.ClientTimeout(total=5)
+
+    try:
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.get(
+                f"{PAYMENT_SERVICE_URL}/internal/payments/profiles/{user_id}/status",
+                headers=_internal_headers(),
+            ) as response:
+                if response.status == 404:
+                    return None
+
+                if response.status >= 400:
+                    raise_core_error("payment_service_unavailable")
+
+                return PaymentProfileStatus.model_validate(await response.json())
+    except asyncio.TimeoutError:
+        raise_core_error("payment_service_timeout")
+    except aiohttp.ClientError:
+        raise_core_error("payment_service_unavailable")
+
+
 async def get_contract_summary(
     application_id: int,
 ) -> ContractSummary | None:
@@ -161,3 +191,51 @@ async def get_payment_summary(
         raise_core_error("payment_service_timeout")
     except aiohttp.ClientError:
         raise_core_error("payment_service_unavailable")
+
+
+async def get_contract_dashboard_summary(
+    user_id: int,
+    role: str,
+) -> ContractDashboardSummary:
+    return await _get_internal_dashboard_summary(
+        url=f"{CONTRACT_SERVICE_URL}/internal/contracts/dashboard/{user_id}",
+        role=role,
+        response_model=ContractDashboardSummary,
+        service_name="contract",
+    )
+
+
+async def get_payment_dashboard_summary(
+    user_id: int,
+    role: str,
+) -> PaymentDashboardSummary:
+    return await _get_internal_dashboard_summary(
+        url=f"{PAYMENT_SERVICE_URL}/internal/payments/dashboard/{user_id}",
+        role=role,
+        response_model=PaymentDashboardSummary,
+        service_name="payment",
+    )
+
+
+async def _get_internal_dashboard_summary(
+    *,
+    url: str,
+    role: str,
+    response_model,
+    service_name: str,
+):
+    timeout = aiohttp.ClientTimeout(total=10)
+    try:
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.get(
+                url,
+                params={"role": role},
+                headers=_internal_headers(),
+            ) as response:
+                if response.status >= 400:
+                    raise_core_error(f"{service_name}_service_unavailable")
+                return response_model.model_validate(await response.json())
+    except asyncio.TimeoutError:
+        raise_core_error(f"{service_name}_service_timeout")
+    except aiohttp.ClientError:
+        raise_core_error(f"{service_name}_service_unavailable")

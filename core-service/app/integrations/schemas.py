@@ -16,6 +16,13 @@ BudgetType = Literal["fixed", "hourly"]
 PaymentStatus = Literal["pending", "paid", "cancelled", "overdue"]
 
 
+class PaymentProfileStatus(BaseModel):
+    user_id: int
+    role: Literal["client", "contractor"]
+    payment_setup_completed: bool
+    payout_setup_completed: bool
+
+
 class ContractParty(BaseModel):
     """Snapshot korisnika koji postaje jedna od ugovornih strana."""
 

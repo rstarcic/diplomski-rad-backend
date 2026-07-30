@@ -1,12 +1,18 @@
+from typing import Literal
+
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from app.contracts.schemas import ContractCreateRequest, ContractResponse
 from app.contracts.service import create_contract, update_contract_status_by_job, get_contract_by_application_id
 from app.internal.schemas import ContractPaymentDetailsResponse
-from app.internal.service import get_contract_payment_details
+from app.internal.service import (
+    get_contract_dashboard_summary,
+    get_contract_payment_details,
+)
 from database import get_db
 from dependencies import _verify_internal
+from app.internal.dashboard_schemas import ContractDashboardSummary
 
 
 router = APIRouter(
@@ -68,3 +74,19 @@ def get_contract_by_application_endpoint(
         application_id=application_id,
     )
     return ContractResponse.from_contract(contract)
+
+
+@router.get(
+    "/dashboard/{user_id}",
+    response_model=ContractDashboardSummary,
+)
+def get_contract_dashboard_summary_endpoint(
+    user_id: int,
+    role: Literal["client", "contractor"],
+    db: Session = Depends(get_db),
+):
+    return get_contract_dashboard_summary(
+        db=db,
+        user_id=user_id,
+        role=role,
+    )
