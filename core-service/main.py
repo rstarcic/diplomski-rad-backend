@@ -7,6 +7,8 @@ from app.jobs.router import router as jobs_router
 from app.internal.router import router as internal_router
 from app.negotiations.router import router as negotiations_router
 from app.profiles.router import router as profiles_router
+from app.reviews.router import router as reviews_router
+from app.dashboard.router import router as dashboard_router
 from database import init_db
 from dotenv import load_dotenv
 from fastapi import FastAPI
@@ -40,6 +42,8 @@ app.include_router(profiles_router, prefix="/profiles")
 app.include_router(jobs_router, prefix="/jobs")
 app.include_router(applications_router)
 app.include_router(negotiations_router, prefix="/negotiations")
+app.include_router(reviews_router)
+app.include_router(dashboard_router)
 app.include_router(internal_router)
 
 if __name__ == "__main__":
