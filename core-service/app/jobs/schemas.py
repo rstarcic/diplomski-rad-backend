@@ -178,8 +178,8 @@ class JobSummaryResponse(BaseModel):
     status: JobStatus
     deadline: datetime
     updated_at: datetime
-    applicants_count: int = 0
-    new_applicants_count: int = 0
+    applications_count: int = 0
+    new_applications_count: int = 0
     contract_status: str = "not_started"
     payment_status: str = "no_payments"
 

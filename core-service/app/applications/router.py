@@ -19,6 +19,7 @@ from app.applications.service import (
     withdraw_job_application,
 )
 from app.dependencies import get_current_user
+from app.integrations.client import get_payment_profile_status
 from app.negotiations.service import (
     accept_application_terms,
     reject_application_terms,
@@ -152,7 +153,7 @@ async def get_job_application_detail_endpoint(
     response_model=ApplicationCreateResponse,
     status_code=201,
 )
-def create_application_endpoint(
+async def create_application_endpoint(
     job_id: int,
     data: ApplicationCreate,
     db: Session = Depends(get_db),
@@ -160,6 +161,13 @@ def create_application_endpoint(
 ):
     if current_user.role != "contractor":
         raise_core_error("forbidden")
+
+    if not current_user.profile_completed:
+        raise_core_error("profile_completion_required")
+
+    payment_status = await get_payment_profile_status(current_user.user_id)
+    if payment_status is None or not payment_status.payout_setup_completed:
+        raise_core_error("payout_setup_required")
 
     return create_job_application(
         db=db,

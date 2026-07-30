@@ -1,4 +1,5 @@
 from app.dependencies import get_current_user
+from app.integrations.client import get_payment_profile_status
 from app.jobs.schemas import (
     JobCreate,
     JobDetailsPageResponse,
@@ -99,7 +100,7 @@ def get_filter_options_endpoint(
 
 
 @router.post("/", response_model=JobResponse, status_code=201)
-def post_job_endpoint(
+async def post_job_endpoint(
     data: JobCreate,
     db: Session = Depends(get_db),
     current_user: Profile = Depends(get_current_user),
@@ -107,18 +108,25 @@ def post_job_endpoint(
     if current_user.role != "client":
         raise_core_error("forbidden")
 
+    if not current_user.profile_completed:
+        raise_core_error("profile_completion_required")
+
+    payment_status = await get_payment_profile_status(current_user.user_id)
+    if payment_status is None or not payment_status.payment_setup_completed:
+        raise_core_error("payment_setup_required")
+
     return create_job(db, current_user.user_id, data)
 
 
 @router.get("/me", response_model=list[JobSummaryResponse], status_code=200)
-def get_my_jobs_endpoint(
+async def get_my_jobs_endpoint(
     db: Session = Depends(get_db),
     current_user: Profile = Depends(get_current_user),
 ):
     if current_user.role != "client":
         raise_core_error("forbidden")
 
-    return get_my_jobs(db, current_user.user_id)
+    return await get_my_jobs(db, current_user.user_id)
 
 
 @router.get("/{job_id}/details", response_model=JobDetailsPageResponse)

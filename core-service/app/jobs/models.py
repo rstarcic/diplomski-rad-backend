@@ -7,10 +7,12 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
     UniqueConstraint,
+    desc,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -46,6 +48,17 @@ class Job(Base):
         CheckConstraint(
             "currency = 'EUR'",
             name="ck_jobs_currency_eur",
+        ),
+        Index(
+            "ix_jobs_open_deadline_created",
+            "status",
+            "deadline",
+            desc("created_at"),
+        ),
+        Index(
+            "ix_jobs_client_status",
+            "client_id",
+            "status",
         ),
     )
 

@@ -163,7 +163,6 @@ def decide_job_application(
     application_id: int,
     decision: str,
 ) -> ApplicationDecisionResponse:
-    print(decision)
     decision = decision.lower().strip()
 
     if decision not in CLIENT_ALLOWED_DECISIONS:
@@ -191,6 +190,15 @@ def decide_job_application(
             id=application.id,
             status=application.status,
         )
+
+    if application.status != "pending":
+        raise_core_error("application_decision_cannot_be_changed")
+
+    if decision == "selected":
+        if job.deadline <= datetime.now(timezone.utc):
+            raise_core_error("application_deadline_expired")
+        if job.status != "open":
+            raise_core_error("job_not_open_for_applications")
 
     try:
         if decision == "rejected":

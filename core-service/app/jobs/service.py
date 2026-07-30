@@ -1,8 +1,11 @@
+import asyncio
 from datetime import datetime, timezone
 
 from app.applications.models import Application
 from app.integrations.client import (
     create_pending_payment,
+    get_contract_summary,
+    get_payment_summary,
     update_contract_status_for_job,
 )
 from app.jobs.models import Job
@@ -22,7 +25,7 @@ from app.profiles.models import Profile
 from app.profiles.schemas import ClientPublicProfile
 from app.reviews.service import get_reviews_for_target
 from errors import raise_core_error
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 
@@ -297,7 +300,10 @@ def update_job(
     return JobResponse.model_validate(job)
 
 
-def get_my_jobs(db: Session, client_id: int) -> list[JobSummaryResponse]:
+async def get_my_jobs(
+    db: Session,
+    client_id: int,
+) -> list[JobSummaryResponse]:
     jobs = (
         db.query(Job)
         .filter(Job.client_id == client_id)
@@ -318,8 +324,61 @@ def get_my_jobs(db: Session, client_id: int) -> list[JobSummaryResponse]:
         .all()
     }
 
-    return [
-        JobSummaryResponse(
+    job_ids = [job.id for job in jobs]
+    if not job_ids:
+        return []
+
+    application_counts = {
+        job_id: (applications_count, new_applications_count)
+        for job_id, applications_count, new_applications_count in (
+            db.query(
+                Application.job_id,
+                func.count(Application.id),
+                func.count(Application.id).filter(
+                    Application.status == "pending"
+                ),
+            )
+            .filter(
+                Application.job_id.in_(job_ids),
+                Application.status != "withdrawn",
+            )
+            .group_by(Application.job_id)
+            .all()
+        )
+    }
+
+    accepted_application_by_job_id = {
+        application.job_id: application
+        for application in (
+            db.query(Application)
+            .filter(
+                Application.job_id.in_(job_ids),
+                Application.status == "accepted",
+            )
+            .all()
+        )
+    }
+
+    async def build_summary(job: Job) -> JobSummaryResponse:
+        accepted_application = accepted_application_by_job_id.get(job.id)
+        contract_status = "not_started"
+        payment_status = "no_payments"
+
+        if accepted_application is not None:
+            contract, payment = await asyncio.gather(
+                get_contract_summary(accepted_application.id),
+                get_payment_summary(accepted_application.id),
+            )
+            if contract is not None:
+                contract_status = contract.status
+            if payment is not None:
+                payment_status = payment.status
+
+        applications_count, new_applications_count = (
+            application_counts.get(job.id, (0, 0))
+        )
+
+        return JobSummaryResponse(
             id=job.id,
             replacement_job_id=replacement_by_source_id.get(job.id),
             title=job.title,
@@ -330,9 +389,13 @@ def get_my_jobs(db: Session, client_id: int) -> list[JobSummaryResponse]:
             status=job.status,
             deadline=job.deadline,
             updated_at=job.updated_at,
+            applications_count=applications_count,
+            new_applications_count=new_applications_count,
+            contract_status=contract_status,
+            payment_status=payment_status,
         )
-        for job in jobs
-    ]
+
+    return list(await asyncio.gather(*(build_summary(job) for job in jobs)))
 
 
 def _get_accepted_job_application(

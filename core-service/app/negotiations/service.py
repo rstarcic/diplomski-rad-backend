@@ -114,12 +114,17 @@ async def accept_application_terms(
         raise_core_error("user_not_found")
 
     # dohvat applicationa i joba
-    application, job = get_application_with_job(
+    result = get_application_with_job(
         db=db,
         job_id=job_id,
         application_id=application_id,
         for_update=True,
     )
+
+    if result is None:
+        raise_core_error("application_not_found")
+
+    application, job = result
 
     # autorizacija trenutnog korisnika
     authorize_application_participant(

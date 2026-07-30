@@ -5,6 +5,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    Index,
     String,
     Text,
     UniqueConstraint,
@@ -28,6 +29,16 @@ class Application(Base):
             "job_id",
             "contractor_id",
             name="uq_applications_job_contractor",
+        ),
+        Index(
+            "ix_applications_contractor_status",
+            "contractor_id",
+            "status",
+        ),
+        Index(
+            "ix_applications_job_status",
+            "job_id",
+            "status",
         ),
     )
 
