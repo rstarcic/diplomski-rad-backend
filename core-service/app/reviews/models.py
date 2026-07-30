@@ -1,7 +1,15 @@
 from datetime import datetime, timezone
 
 from database import Base
-from sqlalchemy import DateTime, Float, ForeignKey, String, Text
+from sqlalchemy import (
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 
@@ -11,8 +19,25 @@ def utc_now():
 
 class Review(Base):
     __tablename__ = "reviews"
+    __table_args__ = (
+        UniqueConstraint(
+            "job_id",
+            "reviewer_id",
+            name="uq_reviews_job_reviewer",
+        ),
+        Index(
+            "ix_reviews_target",
+            "target_type",
+            "target_id",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    job_id: Mapped[int | None] = mapped_column(
+        ForeignKey("jobs.id"),
+        nullable=True,
+        index=True,
+    )
     reviewer_id: Mapped[int] = mapped_column(
         ForeignKey("profiles.user_id"), nullable=False
     )

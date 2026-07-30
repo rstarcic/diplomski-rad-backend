@@ -1,11 +1,20 @@
+from app.applications.models import Application
+from app.integrations.client import get_payment_summary
+from app.jobs.models import Job
+from app.profiles.models import Profile
 from app.reviews.models import Review
 from app.reviews.schemas import (
+    ReviewCreate,
+    ReviewCreateResponse,
     ReviewerResponse,
     ReviewItemResponse,
     ReviewRatingsResponse,
     ReviewSummaryResponse,
     TargetReviewsResponse,
 )
+from errors import raise_core_error
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 
@@ -90,6 +99,89 @@ def _build_review_item(review: Review) -> ReviewItemResponse:
             reliability_rating=review.reliability_rating,
             collaboration_rating=review.collaboration_rating,
         ),
+    )
+
+
+async def create_job_review(
+    db: Session,
+    job_id: int,
+    current_user: Profile,
+    data: ReviewCreate,
+) -> ReviewCreateResponse:
+    row = db.execute(
+        select(Job, Application)
+        .join(Application, Application.job_id == Job.id)
+        .where(
+            Job.id == job_id,
+            Application.status == "accepted",
+        )
+    ).one_or_none()
+
+    if row is None:
+        job_exists = db.scalar(select(Job.id).where(Job.id == job_id))
+        if job_exists is None:
+            raise_core_error("job_not_found")
+        raise_core_error("review_not_available")
+
+    job, application = row
+
+    if (
+        current_user.role == "client"
+        and current_user.user_id == job.client_id
+    ):
+        target_id = application.contractor_id
+        target_type = "contractor"
+    elif (
+        current_user.role == "contractor"
+        and current_user.user_id == application.contractor_id
+    ):
+        target_id = job.client_id
+        target_type = "client"
+    else:
+        raise_core_error("forbidden")
+
+    payment = await get_payment_summary(application.id)
+    if payment is None or payment.status != "paid":
+        raise_core_error("review_payment_required")
+
+    existing_review = db.scalar(
+        select(Review.id).where(
+            Review.job_id == job_id,
+            Review.reviewer_id == current_user.user_id,
+        )
+    )
+    if existing_review is not None:
+        raise_core_error("review_already_submitted")
+
+    review = Review(
+        job_id=job_id,
+        reviewer_id=current_user.user_id,
+        target_id=target_id,
+        target_type=target_type,
+        comment=data.comment.strip(),
+        communication_rating=data.communication_rating,
+        clarity_rating=data.clarity_rating,
+        reliability_rating=data.reliability_rating,
+        collaboration_rating=data.collaboration_rating,
+    )
+
+    try:
+        db.add(review)
+        db.commit()
+        db.refresh(review)
+    except IntegrityError:
+        db.rollback()
+        raise_core_error("review_already_submitted")
+    except Exception:
+        db.rollback()
+        raise
+
+    item = _build_review_item(review)
+    return ReviewCreateResponse(
+        **item.model_dump(),
+        job_id=job_id,
+        target_id=target_id,
+        target_type=target_type,
     )
 
 

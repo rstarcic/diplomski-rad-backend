@@ -1,7 +1,7 @@
 import os
 
 from dotenv import load_dotenv
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 load_dotenv()
@@ -35,3 +35,19 @@ def get_db():
 
 def init_db():
     Base.metadata.create_all(bind=engine)
+
+    # Compatibility migration for databases created before reviews were
+    # associated with jobs. New installations already have this column.
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "ALTER TABLE reviews "
+                "ADD COLUMN IF NOT EXISTS job_id INTEGER REFERENCES jobs(id)"
+            )
+        )
+        connection.execute(
+            text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_reviews_job_reviewer "
+                "ON reviews (job_id, reviewer_id)"
+            )
+        )
