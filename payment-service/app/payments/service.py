@@ -18,10 +18,60 @@ from app.integrations.stripe_connect import (
 from app.models import JobPayment, PaymentProfile
 from app.payments.schemas import CurrentUser, PaymentSetupRequest, ConnectOnboardingRequest
 from errors import raise_payment_error
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
+
+
+def get_user_transactions(
+    db: Session,
+    current_user: CurrentUser,
+    page: int,
+    page_size: int,
+) -> tuple[list[dict], int]:
+    if current_user.role == "client":
+        user_filter = JobPayment.client_id == current_user.id
+        transaction_type = "payment"
+    elif current_user.role == "contractor":
+        user_filter = JobPayment.contractor_id == current_user.id
+        transaction_type = "earning"
+    else:
+        raise_payment_error("forbidden")
+
+    total = db.scalar(
+        select(func.count(JobPayment.id)).where(user_filter)
+    ) or 0
+
+    payments = list(
+        db.scalars(
+            select(JobPayment)
+            .where(user_filter)
+            .order_by(JobPayment.updated_at.desc(), JobPayment.id.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        ).all()
+    )
+
+    items = [
+        {
+            "id": payment.id,
+            "job_id": payment.job_id,
+            "job_title": payment.job_title,
+            "contract_id": payment.contract_id,
+            "application_id": payment.application_id,
+            "amount_minor": payment.amount_minor,
+            "currency": payment.currency,
+            "status": payment.status,
+            "transaction_type": transaction_type,
+            "stripe_payment_intent_id": payment.stripe_payment_intent_id,
+            "created_at": payment.created_at,
+            "updated_at": payment.updated_at,
+        }
+        for payment in payments
+    ]
+
+    return items, total
 
 
 def get_payment_profile(db: Session, user_id: int) -> PaymentProfile | None:
@@ -88,21 +138,28 @@ async def create_contractor_connect_onboarding(
         if account is None:
             account = create_express_connected_account(
                 user_id=contractor.user_id,
+                email=str(contractor.email),
+                full_name=contractor.full_name,
+                product_description=contractor.about,
+                phone=contractor.phone,
+                address=data.address.strip(),
+                postal_code=data.postal_code.strip(),
                 country_code=data.country_code,
+                city=contractor.city,
             )
-
-        account = update_connected_account_prefill(
-            stripe_account_id=account.id,
-            user_id=contractor.user_id,
-            email=str(contractor.email),
-            full_name=contractor.full_name,
-            product_description=contractor.about,
-            phone=contractor.phone,
-            address=data.address.strip(),
-            postal_code=data.postal_code.strip(),
-            country_code=data.country_code,
-            city=contractor.city,
-        )
+        else:
+            account = update_connected_account_prefill(
+                stripe_account_id=account.id,
+                user_id=contractor.user_id,
+                email=str(contractor.email),
+                full_name=contractor.full_name,
+                product_description=contractor.about,
+                phone=contractor.phone,
+                address=data.address.strip(),
+                postal_code=data.postal_code.strip(),
+                country_code=data.country_code,
+                city=contractor.city,
+            )
 
         payment_profile.stripe_account_id = account.id
 

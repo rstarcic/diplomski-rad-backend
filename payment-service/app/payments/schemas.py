@@ -84,6 +84,32 @@ class JobPaymentSummaryResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
+
+class TransactionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    job_id: int
+    job_title: str
+    contract_id: int
+    application_id: int
+    amount_minor: int
+    currency: str
+    status: Literal["pending", "paid", "cancelled", "overdue"]
+    transaction_type: Literal["payment", "earning"]
+    stripe_payment_intent_id: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class TransactionListResponse(BaseModel):
+    items: list[TransactionResponse]
+    page: int
+    page_size: int
+    total: int
+    has_more: bool
+
+
 class CheckoutSessionResponse(BaseModel):
     checkout_url: str
 

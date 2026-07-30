@@ -97,6 +97,14 @@ def create_checkout_session(*, payment, stripe_customer_id: str, contractor_stri
                     "transfer_data": {
                         "destination": contractor_stripe_account_id,
                     },
+                    "description": f"Payment for job: {payment.job_title}",
+                    "metadata": {
+                        "payment_id": str(payment.id),
+                        "contract_id": str(payment.contract_id),
+                        "application_id": str(payment.application_id),
+                        "job_id": str(payment.job_id),
+                        "job_title": payment.job_title,
+                    },
                 },
                 "success_url": (
                     f"{application_url}"

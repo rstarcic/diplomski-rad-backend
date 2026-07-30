@@ -1,7 +1,7 @@
 import os
 
 import stripe
-from fastapi import APIRouter, Depends, Header, Request, status
+from fastapi import APIRouter, Depends, Header, Query, Request, status
 from sqlalchemy.orm import Session
 
 from app.dependencies import get_current_user, get_current_user_id
@@ -14,6 +14,7 @@ from app.payments.schemas import (
     CurrentUser,
     PaymentSetupRequest,
     PaymentStatusResponse,
+    TransactionListResponse,
 )
 from app.payments.service import (
     complete_payment_setup,
@@ -21,6 +22,7 @@ from app.payments.service import (
     create_contractor_connect_onboarding,
     create_payment_method_setup_session,
     get_payment_profile,
+    get_user_transactions,
     sync_connected_account_status,
 )
 from database import get_db
@@ -39,6 +41,29 @@ def get_my_payment_status(
     if profile is None:
         raise_payment_error("payment_profile_not_found")
     return profile
+
+
+@router.get("/transactions", response_model=TransactionListResponse)
+def get_my_transactions(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=10, ge=1, le=100),
+    current_user: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    items, total = get_user_transactions(
+        db=db,
+        current_user=current_user,
+        page=page,
+        page_size=page_size,
+    )
+
+    return TransactionListResponse(
+        items=items,
+        page=page,
+        page_size=page_size,
+        total=total,
+        has_more=page * page_size < total,
+    )
 
 
 @router.post(

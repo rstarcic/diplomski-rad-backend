@@ -1,11 +1,8 @@
 import logging
 import os
-import re
-
 import stripe
 from app.integrations.stripe_client import stripe_client
 from errors import payment_error
-from app.integrations.stripe_client import STRIPE_SECRET_KEY, stripe_client
 
 logger = logging.getLogger(__name__)
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173").rstrip("/")
@@ -28,24 +25,6 @@ def _split_full_name(full_name: str | None) -> tuple[str | None, str | None]:
     return parts[0], parts[1] if len(parts) > 1 else None
 
 
-def _normalize_phone(
-    phone: str | None,
-    country_code: str | None,
-) -> str | None:
-    if not phone:
-        return None
-
-    compact = re.sub(r"[^\d+]", "", phone)
-    if compact.startswith("00"):
-        compact = f"+{compact[2:]}"
-    elif compact.startswith("0") and country_code == "HR":
-        compact = f"+385{compact[1:]}"
-
-    if re.fullmatch(r"\+[1-9]\d{7,14}", compact):
-        return compact
-    return None
-
-
 def _contractor_account_params(
     *,
     user_id: int,
@@ -59,7 +38,6 @@ def _contractor_account_params(
     city: str | None,
 ) -> dict:
     first_name, last_name = _split_full_name(full_name)
-    normalized_phone = _normalize_phone(phone, country_code)
     normalized_description = (
         " ".join(product_description.split())
         if product_description and product_description.strip()
@@ -70,8 +48,6 @@ def _contractor_account_params(
         individual["first_name"] = first_name
     if last_name:
         individual["last_name"] = last_name
-    if normalized_phone:
-        individual["phone"] = normalized_phone
     individual_address = {}
     if address:
         individual_address["line1"] = address
@@ -128,22 +104,26 @@ def find_connected_account_by_user_id(user_id: int):
 def create_express_connected_account(
     *,
     user_id: int,
-    country_code: str | None = None,
+    email: str,
+    full_name: str | None,
+    product_description: str | None,
+    phone: str | None,
+    address: str | None,
+    postal_code: str | None,
+    country_code: str | None,
+    city: str | None,
 ):
-    params = {
-        "capabilities": {
-            "transfers": {"requested": True},
-        },
-        "metadata": {"user_id": str(user_id)},
-        "controller": {
-            "fees": {"payer": "application"},
-            "losses": {"payments": "application"},
-            "requirement_collection": "stripe",
-            "stripe_dashboard": {"type": "express"},
-        },
-    }
-    if country_code:
-        params["country"] = country_code
+    params = _contractor_account_params(
+        user_id=user_id,
+        email=email,
+        full_name=full_name,
+        product_description=product_description,
+        phone=phone,
+        address=address,
+        postal_code=postal_code,
+        country_code=country_code,
+        city=city,
+    )
 
     try:
         return stripe_client.v1.accounts.create(
@@ -179,9 +159,18 @@ def update_connected_account_prefill(
         country_code=country_code,
         city=city,
     )
-    params.pop("controller")
-    # An account's country is set at creation and can't be changed by an update.
-    params.pop("country", None)
+
+    # Stripe collects KYC data for Express accounts. After onboarding has
+    # started, the platform can no longer update these identity fields.
+    for restricted_field in (
+        "business_type",
+        "controller",
+        "country",
+        "email",
+        "individual",
+    ):
+        params.pop(restricted_field, None)
+
     try:
         return stripe_client.v1.accounts.update(
             stripe_account_id,
