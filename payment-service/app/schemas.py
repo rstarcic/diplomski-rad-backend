@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class PaymentProfileCreate(BaseModel):
@@ -12,4 +12,4 @@ class PaymentStatusResponse(BaseModel):
     payment_setup_completed: bool
     payout_setup_completed: bool
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)

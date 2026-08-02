@@ -5,6 +5,8 @@ from pydantic import BaseModel
 
 class ContractDashboardItem(BaseModel):
     id: int
+    job_id: int
+    application_id: int
     job_title: str
     status: str
     updated_at: datetime
@@ -16,3 +18,4 @@ class ContractDashboardSummary(BaseModel):
     ending_soon_count: int
     pending_signature_count: int
     recent: list[ContractDashboardItem]
+    pending_signatures: list[ContractDashboardItem]

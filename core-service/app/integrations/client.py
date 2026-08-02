@@ -1,8 +1,14 @@
-import asyncio
+import logging
 import os
 from pathlib import Path
+from typing import Literal
 
 import aiohttp
+from fastapi import status
+from app.integrations.dashboard_schemas import (
+    ContractDashboardSummary,
+    PaymentDashboardSummary,
+)
 from app.integrations.schemas import (
     ContractCreateRequest,
     ContractServiceResponse,
@@ -10,12 +16,11 @@ from app.integrations.schemas import (
     PaymentProfileStatus,
     PaymentSummary,
 )
-from app.integrations.dashboard_schemas import (
-    ContractDashboardSummary,
-    PaymentDashboardSummary,
-)
-from errors import raise_core_error
 from dotenv import load_dotenv
+from errors import raise_core_error
+
+logger = logging.getLogger(__name__)
+
 
 load_dotenv(Path(__file__).resolve().parents[2] / ".env", override=False)
 
@@ -46,7 +51,7 @@ async def create_contract(
                 json=request.model_dump(mode="json"),
                 headers=_internal_headers(),
             ) as response:
-                if response.status >= 400:
+                if response.status >= status.HTTP_400_BAD_REQUEST:
                     error_body = await response.text()
 
                     print(
@@ -58,7 +63,7 @@ async def create_contract(
 
                 response_data = await response.json()
 
-    except asyncio.TimeoutError:
+    except TimeoutError:
         raise_core_error("contract_service_timeout")
 
     except aiohttp.ClientError:
@@ -67,7 +72,7 @@ async def create_contract(
     return ContractServiceResponse.model_validate(response_data)
 
 
-async def update_contract_status_for_job(job_id: int, action: str) -> dict:
+async def update_contract_status_for_job(job_id: int, action: str) -> dict[str, object]:
     timeout = aiohttp.ClientTimeout(total=10)
     url = f"{CONTRACT_SERVICE_URL}/internal/contracts/job/{job_id}/{action}"
 
@@ -77,18 +82,16 @@ async def update_contract_status_for_job(job_id: int, action: str) -> dict:
                 url,
                 headers=_internal_headers(),
             ) as response:
-                if response.status >= 400:
+                if response.status >= status.HTTP_400_BAD_REQUEST:
                     error_body = await response.text()
                     print(
                         "Contract status update failed "
                         f"url={url}, status={response.status}, body={error_body}"
                     )
                     raise_core_error("contract_status_update_failed")
-                print(
-                    f"Contract status updated url={url}, status={response.status}"
-                )
+                print(f"Contract status updated url={url}, status={response.status}")
                 return await response.json()
-    except asyncio.TimeoutError:
+    except TimeoutError:
         print(f"Contract status update timed out url={url}")
         raise_core_error("contract_service_timeout")
     except aiohttp.ClientError as exc:
@@ -96,7 +99,7 @@ async def update_contract_status_for_job(job_id: int, action: str) -> dict:
         raise_core_error("contract_service_unavailable")
 
 
-async def create_pending_payment(contract_id: int) -> dict:
+async def create_pending_payment(contract_id: int) -> dict[str, object]:
     timeout = aiohttp.ClientTimeout(total=10)
 
     try:
@@ -106,11 +109,11 @@ async def create_pending_payment(contract_id: int) -> dict:
                 json={"contract_id": contract_id},
                 headers=_internal_headers(),
             ) as response:
-                if response.status >= 400:
+                if response.status >= status.HTTP_400_BAD_REQUEST:
                     raise_core_error("payment_creation_failed")
 
                 return await response.json()
-    except asyncio.TimeoutError:
+    except TimeoutError:
         raise_core_error("payment_service_timeout")
     except aiohttp.ClientError:
         raise_core_error("payment_service_unavailable")
@@ -127,14 +130,14 @@ async def get_payment_profile_status(
                 f"{PAYMENT_SERVICE_URL}/internal/payments/profiles/{user_id}/status",
                 headers=_internal_headers(),
             ) as response:
-                if response.status == 404:
+                if response.status == status.HTTP_404_NOT_FOUND:
                     return None
 
-                if response.status >= 400:
+                if response.status >= status.HTTP_400_BAD_REQUEST:
                     raise_core_error("payment_service_unavailable")
 
                 return PaymentProfileStatus.model_validate(await response.json())
-    except asyncio.TimeoutError:
+    except TimeoutError:
         raise_core_error("payment_service_timeout")
     except aiohttp.ClientError:
         raise_core_error("payment_service_unavailable")
@@ -151,16 +154,14 @@ async def get_contract_summary(
                 f"{CONTRACT_SERVICE_URL}/internal/contracts/application/{application_id}",
                 headers=_internal_headers(),
             ) as response:
-                if response.status == 404:
+                if response.status == status.HTTP_404_NOT_FOUND:
                     return None
 
-                if response.status >= 400:
+                if response.status >= status.HTTP_400_BAD_REQUEST:
                     raise_core_error("contract_summary_fetch_failed")
 
-                return ContractSummary.model_validate(
-                    await response.json()
-                )
-    except asyncio.TimeoutError:
+                return ContractSummary.model_validate(await response.json())
+    except TimeoutError:
         raise_core_error("contract_service_timeout")
     except aiohttp.ClientError:
         raise_core_error("contract_service_unavailable")
@@ -177,17 +178,15 @@ async def get_payment_summary(
                 f"{PAYMENT_SERVICE_URL}/internal/payments/application/{application_id}",
                 headers=_internal_headers(),
             ) as response:
-                if response.status == 404:
+                if response.status == status.HTTP_404_NOT_FOUND:
                     return None
 
-                if response.status >= 400:
+                if response.status >= status.HTTP_400_BAD_REQUEST:
                     raise_core_error("payment_summary_fetch_failed")
 
-                return PaymentSummary.model_validate(
-                    await response.json()
-                )
+                return PaymentSummary.model_validate(await response.json())
 
-    except asyncio.TimeoutError:
+    except TimeoutError:
         raise_core_error("payment_service_timeout")
     except aiohttp.ClientError:
         raise_core_error("payment_service_unavailable")
@@ -195,7 +194,7 @@ async def get_payment_summary(
 
 async def get_contract_dashboard_summary(
     user_id: int,
-    role: str,
+    role: Literal["client", "contractor"],
 ) -> ContractDashboardSummary:
     return await _get_internal_dashboard_summary(
         url=f"{CONTRACT_SERVICE_URL}/internal/contracts/dashboard/{user_id}",
@@ -207,7 +206,7 @@ async def get_contract_dashboard_summary(
 
 async def get_payment_dashboard_summary(
     user_id: int,
-    role: str,
+    role: Literal["client", "contractor"],
 ) -> PaymentDashboardSummary:
     return await _get_internal_dashboard_summary(
         url=f"{PAYMENT_SERVICE_URL}/internal/payments/dashboard/{user_id}",
@@ -220,9 +219,9 @@ async def get_payment_dashboard_summary(
 async def _get_internal_dashboard_summary(
     *,
     url: str,
-    role: str,
+    role: Literal["client", "contractor"],
     response_model,
-    service_name: str,
+    service_name: Literal["contract", "payment"],
 ):
     timeout = aiohttp.ClientTimeout(total=10)
     try:
@@ -232,10 +231,10 @@ async def _get_internal_dashboard_summary(
                 params={"role": role},
                 headers=_internal_headers(),
             ) as response:
-                if response.status >= 400:
+                if response.status >= status.HTTP_400_BAD_REQUEST:
                     raise_core_error(f"{service_name}_service_unavailable")
                 return response_model.model_validate(await response.json())
-    except asyncio.TimeoutError:
+    except TimeoutError:
         raise_core_error(f"{service_name}_service_timeout")
     except aiohttp.ClientError:
         raise_core_error(f"{service_name}_service_unavailable")

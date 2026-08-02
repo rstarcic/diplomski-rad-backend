@@ -1,8 +1,8 @@
 from datetime import datetime
+from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, Field
-
+from pydantic import BaseModel, EmailStr, Field
 
 ContractStatus = Literal[
     "pending_signatures",
@@ -24,18 +24,18 @@ class PaymentProfileStatus(BaseModel):
 
 
 class ContractParty(BaseModel):
-    """Snapshot korisnika koji postaje jedna od ugovornih strana."""
+    """A snapshot of a user who becomes one of the contracting parties."""
 
     user_id: int = Field(gt=0)
     full_name: str = Field(min_length=1, max_length=200)
-    email: str = Field(min_length=1, max_length=255)
+    email: EmailStr
     phone: str | None = None
     country: str | None = None
     city: str | None = None
 
 
 class ContractJob(BaseModel):
-    """Snapshot posla koji se sprema u ugovor."""
+    """A snapshot of the job stored in the contract."""
 
     id: int = Field(gt=0)
     title: str = Field(min_length=1, max_length=255)
@@ -43,18 +43,21 @@ class ContractJob(BaseModel):
 
 
 class ContractTermsRequest(BaseModel):
-    """Dogovoreni financijski i vremenski uvjeti ugovora."""
+    """The agreed financial terms and timeframe of the contract."""
 
-    budget_amount: float = Field(gt=0)
+    budget_amount: Decimal = Field(gt=0)
     budget_type: BudgetType
     currency: str = Field(default="EUR", min_length=3, max_length=3)
-    duration: int = Field(gt=0, description="Trajanje ugovora u danima.")
+    duration: int = Field(
+        gt=0,
+        description="Contract duration in days.",
+    )
     hours_per_week: int = Field(gt=0, le=168)
     deliverables: str = Field(min_length=1)
 
 
 class ContractCreateRequest(BaseModel):
-    """Payload koji core-service šalje contract-serviceu pri izradi ugovora."""
+    """The payload sent by the core service to create a contract."""
 
     application_id: int = Field(gt=0)
     negotiation_id: int | None = Field(default=None, gt=0)
@@ -66,7 +69,7 @@ class ContractCreateRequest(BaseModel):
 
 
 class ContractServiceResponse(BaseModel):
-    """Minimalni odgovor contract-servicea nakon izrade ugovora."""
+    """A minimal response returned after the contract is created."""
 
     id: int
     contract_number: str
@@ -77,7 +80,7 @@ class ContractServiceResponse(BaseModel):
 class ContractPartySummary(BaseModel):
     user_id: int
     full_name: str
-    email: str
+    email: EmailStr
 
 
 class ContractPlatformSummary(BaseModel):
@@ -85,7 +88,7 @@ class ContractPlatformSummary(BaseModel):
 
 
 class ContractSummary(BaseModel):
-    """Sažetak ugovora prikazan u detaljima prijave."""
+    """A contract summary displayed in the application details."""
 
     id: int
     contract_number: str
@@ -100,7 +103,12 @@ class ContractSummary(BaseModel):
 
     budget_amount: float
     budget_type: BudgetType
-    currency: str
+    currency: str = Field(
+        default="EUR",
+        min_length=3,
+        max_length=3,
+        pattern=r"^[A-Za-z]{3}$",
+    )
     duration: int
     hours_per_week: int
     deliverables: str
@@ -113,11 +121,14 @@ class ContractSummary(BaseModel):
 
 
 class PaymentSummary(BaseModel):
-    id: int
-    contract_id: int
-    status: Literal["pending", "paid", "cancelled", "overdue"]
-    amount_minor: int
-    currency: str
-    checkout_attempt: int
+    id: int = Field(gt=0)
+    contract_id: int = Field(gt=0)
+    status: PaymentStatus
+    amount_minor: int = Field(ge=0)
+    currency: str = Field(
+        min_length=3,
+        max_length=3,
+    )
+    checkout_attempt: int = Field(ge=0)
     created_at: datetime
     updated_at: datetime

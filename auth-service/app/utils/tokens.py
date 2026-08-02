@@ -1,5 +1,5 @@
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from app.schemas import TokenPayload
 from errors import raise_auth_error
@@ -15,7 +15,7 @@ def create_access_token(
     expires_delta: timedelta = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
 ) -> str:
     data = payload.model_dump()
-    data["exp"] = datetime.now(timezone.utc) + expires_delta
+    data["exp"] = datetime.now(UTC) + expires_delta
     return jwt.encode(data, SECRET_KEY, algorithm=ALGORITHM)
 
 

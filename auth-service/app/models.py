@@ -1,5 +1,4 @@
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from database import Base
@@ -8,7 +7,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 
 def utc_now():
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class User(Base):
@@ -20,19 +19,19 @@ class User(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
 
-    full_name: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
-    profile_picture: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    full_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    profile_picture: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     email: Mapped[str] = mapped_column(
         String(255), unique=True, index=True, nullable=False
     )
     email_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
-    password_hash: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=True)
 
     role: Mapped[str] = mapped_column(String(20), nullable=False)
 
-    google_sub: Mapped[Optional[str]] = mapped_column(
+    google_sub: Mapped[str | None] = mapped_column(
         String(255),
         unique=True,
         nullable=True,
@@ -69,10 +68,16 @@ class RefreshSession(Base):
 
     user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"),
+        index=True,
         nullable=False,
     )
 
-    token_hash: Mapped[str] = mapped_column(String, nullable=False)
+    token_hash: Mapped[str] = mapped_column(
+        String(64),
+        unique=True,
+        index=True,
+        nullable=False,
+    )
 
     expires_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -82,7 +87,6 @@ class RefreshSession(Base):
     revoked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     user: Mapped["User"] = relationship(
-        "User",
         back_populates="refresh_sessions",
     )
 
@@ -97,8 +101,10 @@ class OAuthPKCE(Base):
     )
 
     flow_type: Mapped[str] = mapped_column(String(10), nullable=False)
-    state: Mapped[str] = mapped_column(String, unique=True, index=True, nullable=False)
-    code_verifier: Mapped[str] = mapped_column(String, nullable=False)
+    state: Mapped[str] = mapped_column(
+        String(128), unique=True, index=True, nullable=False
+    )
+    code_verifier: Mapped[str] = mapped_column(String(128), nullable=False)
 
     expires_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -117,11 +123,12 @@ class PasswordResetToken(Base):
 
     user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"),
+        index=True,
         nullable=False,
     )
 
     token_hash: Mapped[str] = mapped_column(
-        String, unique=True, index=True, nullable=False
+        String(64), unique=True, index=True, nullable=False
     )
 
     expires_at: Mapped[datetime] = mapped_column(
@@ -143,11 +150,12 @@ class EmailVerificationToken(Base):
 
     user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"),
+        index=True,
         nullable=False,
     )
 
     token_hash: Mapped[str] = mapped_column(
-        String, unique=True, index=True, nullable=False
+        String(64), unique=True, index=True, nullable=False
     )
 
     expires_at: Mapped[datetime] = mapped_column(

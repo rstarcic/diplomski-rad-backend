@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 
 from app.applications.models import Application
 from app.integrations.client import (
@@ -102,25 +102,26 @@ def create_job(db: Session, client_id: int, data: JobCreate) -> JobResponse:
 def get_job_filter_options(db: Session) -> JobFilterOptionsResponse:
     active_jobs = (
         Job.status == "open",
-        Job.deadline > datetime.now(timezone.utc),
+        Job.deadline > datetime.now(UTC),
     )
 
-    categories = [
-        value
-        for (value,) in (
-            db.query(Job.category)
-            .filter(*active_jobs, Job.category.isnot(None), Job.category != "")
+    categories = list(
+        db.scalars(
+            select(Job.category)
+            .where(
+                *active_jobs,
+                Job.category.isnot(None),
+                Job.category != "",
+            )
             .distinct()
             .order_by(Job.category)
-            .all()
-        )
-    ]
+        ).all()
+    )
 
-    cities = [
-        value
-        for (value,) in (
-            db.query(Job.location)
-            .filter(
+    cities = list(
+        db.scalars(
+            select(Job.location)
+            .where(
                 *active_jobs,
                 Job.location_type.in_(["on_site", "hybrid"]),
                 Job.location.isnot(None),
@@ -128,9 +129,8 @@ def get_job_filter_options(db: Session) -> JobFilterOptionsResponse:
             )
             .distinct()
             .order_by(Job.location)
-            .all()
-        )
-    ]
+        ).all()
+    )
 
     return JobFilterOptionsResponse(
         categories=categories,
@@ -143,28 +143,25 @@ def get_job_details(
     job_id: int,
     contractor_id: int,
 ) -> JobDetailsPageResponse | None:
-    row = (
-        db.query(Job, Profile)
+    row = db.execute(
+        select(Job, Profile)
         .join(Profile, Profile.user_id == Job.client_id)
-        .filter(
+        .where(
             Job.id == job_id,
             Job.status == "open",
-            Job.deadline > datetime.now(timezone.utc),
+            Job.deadline > datetime.now(UTC),
         )
-        .one_or_none()
-    )
+    ).one_or_none()
 
     if row is None:
         return None
 
     job, client = row
-    application_status = (
-        db.query(Application.status)
-        .filter(
+    application_status = db.scalar(
+        select(Application.status).where(
             Application.job_id == job.id,
             Application.contractor_id == contractor_id,
         )
-        .scalar()
     )
     reviews = get_reviews_for_target(
         db=db,
@@ -204,16 +201,19 @@ def get_open_jobs(
     page_size: int = 16,
 ) -> PaginatedResponse[JobSearchItemResponse]:
     query = (
-        db.query(Job, Profile)
+        select(Job, Profile)
         .join(Profile, Profile.user_id == Job.client_id)
-        .filter(Job.status == "open", Job.deadline > datetime.now(timezone.utc))
+        .where(
+            Job.status == "open",
+            Job.deadline > datetime.now(UTC),
+        )
     )
 
     normalized_search = search.strip() if search else ""
 
     if normalized_search:
         pattern = f"%{normalized_search}%"
-        query = query.filter(
+        query = query.where(
             or_(
                 Job.title.ilike(pattern),
                 Job.category.ilike(pattern),
@@ -222,7 +222,7 @@ def get_open_jobs(
         )
 
     if category:
-        query = query.filter(Job.category == category)
+        query = query.where(Job.category == category)
 
     allowed_location_types = {"remote", "on_site", "hybrid"}
 
@@ -230,7 +230,7 @@ def get_open_jobs(
         if location_type not in allowed_location_types:
             raise_core_error("invalid_location_type")
 
-        query = query.filter(Job.location_type == location_type)
+        query = query.where(Job.location_type == location_type)
 
     if location and location.strip():
         normalized_location = location.strip()
@@ -238,25 +238,26 @@ def get_open_jobs(
         if location_type == "remote":
             pass
         else:
-            query = query.filter(
+            query = query.where(
                 Job.location.ilike(f"%{normalized_location}%"),
                 Job.location_type.in_(["on_site", "hybrid"]),
             )
     if budget_type:
-        query = query.filter(Job.budget_type == budget_type)
+        query = query.where(Job.budget_type == budget_type)
 
     if min_budget is not None:
-        query = query.filter(Job.budget_amount >= min_budget)
+        query = query.where(Job.budget_amount >= min_budget)
 
     if max_budget is not None:
-        query = query.filter(Job.budget_amount <= max_budget)
-    total = query.count()
-    rows = (
+        query = query.where(Job.budget_amount <= max_budget)
+    total = db.scalar(
+        select(func.count()).select_from(query.subquery())
+    ) or 0
+    rows = db.execute(
         query.order_by(Job.created_at.desc(), Job.id.desc())
         .offset((page - 1) * page_size)
         .limit(page_size)
-        .all()
-    )
+    ).all()
 
     return PaginatedResponse[JobSearchItemResponse](
         items=[build_job_search_item(job, client) for job, client in rows],
@@ -267,8 +268,17 @@ def get_open_jobs(
     )
 
 
-def get_job_by_id(db: Session, client_id: int, job_id: int) -> JobResponse:
-    job = db.query(Job).filter(Job.id == job_id, Job.client_id == client_id).first()
+def get_job_by_id(
+    db: Session,
+    client_id: int,
+    job_id: int,
+) -> JobResponse | None:
+    job = db.scalars(
+        select(Job).where(
+            Job.id == job_id,
+            Job.client_id == client_id,
+        )
+    ).first()
     if not job:
         return None
 
@@ -281,7 +291,12 @@ def update_job(
     job_id: int,
     data: JobUpdate,
 ) -> JobResponse | None:
-    job = db.query(Job).filter(Job.id == job_id, Job.client_id == client_id).first()
+    job = db.scalars(
+        select(Job).where(
+            Job.id == job_id,
+            Job.client_id == client_id,
+        )
+    ).first()
 
     if not job:
         return None
@@ -304,24 +319,22 @@ async def get_my_jobs(
     db: Session,
     client_id: int,
 ) -> list[JobSummaryResponse]:
-    jobs = (
-        db.query(Job)
-        .filter(Job.client_id == client_id)
-        .order_by(Job.updated_at.desc())
-        .all()
+    jobs = list(
+        db.scalars(
+            select(Job)
+            .where(Job.client_id == client_id)
+            .order_by(Job.updated_at.desc())
+        ).all()
     )
 
     replacement_by_source_id = {
         source_job_id: replacement_job_id
-        for replacement_job_id, source_job_id in db.query(
-            Job.id,
-            Job.source_job_id,
-        )
-        .filter(
-            Job.client_id == client_id,
-            Job.source_job_id.isnot(None),
-        )
-        .all()
+        for replacement_job_id, source_job_id in db.execute(
+            select(Job.id, Job.source_job_id).where(
+                Job.client_id == client_id,
+                Job.source_job_id.isnot(None),
+            )
+        ).all()
     }
 
     job_ids = [job.id for job in jobs]
@@ -331,31 +344,32 @@ async def get_my_jobs(
     application_counts = {
         job_id: (applications_count, new_applications_count)
         for job_id, applications_count, new_applications_count in (
-            db.query(
-                Application.job_id,
-                func.count(Application.id),
-                func.count(Application.id).filter(
-                    Application.status == "pending"
-                ),
-            )
-            .filter(
-                Application.job_id.in_(job_ids),
-                Application.status != "withdrawn",
-            )
-            .group_by(Application.job_id)
-            .all()
+            db.execute(
+                select(
+                    Application.job_id,
+                    func.count(Application.id),
+                    func.count(Application.id).filter(
+                        Application.status == "pending"
+                    ),
+                )
+                .where(
+                    Application.job_id.in_(job_ids),
+                    Application.status != "withdrawn",
+                )
+                .group_by(Application.job_id)
+            ).all()
         )
     }
 
     accepted_application_by_job_id = {
         application.job_id: application
         for application in (
-            db.query(Application)
-            .filter(
-                Application.job_id.in_(job_ids),
-                Application.status == "accepted",
-            )
-            .all()
+            db.scalars(
+                select(Application).where(
+                    Application.job_id.in_(job_ids),
+                    Application.status == "accepted",
+                )
+            ).all()
         )
     }
 
@@ -374,8 +388,8 @@ async def get_my_jobs(
             if payment is not None:
                 payment_status = payment.status
 
-        applications_count, new_applications_count = (
-            application_counts.get(job.id, (0, 0))
+        applications_count, new_applications_count = application_counts.get(
+            job.id, (0, 0)
         )
 
         return JobSummaryResponse(
@@ -418,7 +432,11 @@ def _get_accepted_job_application(
     return row
 
 
-def mark_job_done(db: Session, job_id: int, current_user: Profile) -> JobResponse:
+def mark_job_done(
+    db: Session,
+    job_id: int,
+    current_user: Profile,
+) -> JobResponse:
     job, application = _get_accepted_job_application(db, job_id)
 
     if current_user.role != "contractor":
@@ -457,7 +475,7 @@ async def mark_job_completed(
     if contract_id is None:
         raise_core_error("invalid_contract_response")
 
-    await create_pending_payment(contract_id) 
+    await create_pending_payment(contract_id)
     job.status = "completed_by_client"
 
     try:

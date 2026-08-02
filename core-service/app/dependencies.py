@@ -6,8 +6,9 @@ from app.profiles.models import Profile
 from database import get_db
 from dotenv import load_dotenv
 from errors import raise_core_error
-from fastapi import Depends, Header, HTTPException, Request
+from fastapi import Depends, Header, HTTPException, Request, status
 from jose import ExpiredSignatureError, JWTError, jwt
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env", override=False)
@@ -21,10 +22,14 @@ INTERNAL_SECRET = os.getenv("INTERNAL_SECRET", "")
 def _verify_internal(x_internal_secret: str = Header(...)) -> None:
     if not INTERNAL_SECRET:
         raise HTTPException(
-            503, detail="Internal API authentication is not configured."
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Internal API authentication is not configured.",
         )
     if not secrets.compare_digest(x_internal_secret, INTERNAL_SECRET):
-        raise HTTPException(403, detail="Forbidden")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden",
+        )
 
 
 def decode_access_token(token: str) -> dict:
@@ -54,7 +59,7 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> Profile
     except (TypeError, ValueError):
         raise_core_error("invalid_or_expired_token")
 
-    profile = db.query(Profile).filter(Profile.user_id == user_id).first()
+    profile = db.scalars(select(Profile).where(Profile.user_id == user_id)).first()
     if not profile:
         raise_core_error("profile_not_found")
 

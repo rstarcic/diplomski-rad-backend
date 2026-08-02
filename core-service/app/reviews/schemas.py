@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ReviewCreate(BaseModel):
@@ -16,7 +16,7 @@ class ReviewerResponse(BaseModel):
     full_name: str | None = None
     profile_picture: str | None = None
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ReviewRatingsResponse(BaseModel):

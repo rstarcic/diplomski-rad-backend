@@ -1,4 +1,3 @@
-import asyncio
 import os
 
 import aiohttp
@@ -27,10 +26,10 @@ async def get_contract_payment_details(contract_id: int) -> ContractPaymentDetai
                     raise_payment_error("contract_not_found")
                 if response.status == status.HTTP_409_CONFLICT:
                     raise_payment_error("contract_not_payable")
-                if response.status >= 400:
+                if response.status >= status.HTTP_400_BAD_REQUEST:
                     raise_payment_error("contract_service_failed")
                 data = await response.json()
-    except asyncio.TimeoutError as exc:
+    except TimeoutError as exc:
         raise payment_error("contract_service_timeout") from exc
     except aiohttp.ClientError as exc:
         raise payment_error("contract_service_unavailable") from exc

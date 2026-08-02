@@ -1,6 +1,8 @@
 import logging
 import os
+
 import stripe
+
 from app.integrations.stripe_client import stripe_client
 from errors import payment_error
 
@@ -41,7 +43,10 @@ def _contractor_account_params(
     normalized_description = (
         " ".join(product_description.split())
         if product_description and product_description.strip()
-        else "Freelance professional services provided through the WorkLink marketplace."
+        else (
+            "Freelance professional services provided through the "
+            "WorkLink marketplace."
+        )
     )
     individual = {"email": email}
     if first_name:
@@ -95,7 +100,8 @@ def find_connected_account_by_user_id(user_id: int):
         (
             account
             for account in accounts.data
-            if account.to_dict().get("metadata", {}).get("user_id") == expected_user_id
+            if account.to_dict().get("metadata", {}).get("user_id")
+            == expected_user_id
         ),
         None,
     )
@@ -128,7 +134,11 @@ def create_express_connected_account(
     try:
         return stripe_client.v1.accounts.create(
             params=params,
-            options={"idempotency_key": f"contractor-connect-account-v1-{user_id}"},
+            options={
+                "idempotency_key": (
+                    f"contractor-connect-account-v1-{user_id}"
+                )
+            },
         )
     except stripe.StripeError as exc:
         _log_stripe_error("connected account creation", exc)
@@ -187,10 +197,12 @@ def create_connected_account_link(*, stripe_account_id: str):
             params={
                 "account": stripe_account_id,
                 "refresh_url": (
-                    f"{FRONTEND_URL}/contractor/settings/stripe?connect=refresh"
+                    f"{FRONTEND_URL}/contractor/settings/"
+                    "stripe?connect=refresh"
                 ),
                 "return_url": (
-                    f"{FRONTEND_URL}/contractor/settings/stripe?connect=returned"
+                    f"{FRONTEND_URL}/contractor/settings/"
+                    "stripe?connect=returned"
                 ),
                 "type": "account_onboarding",
             }

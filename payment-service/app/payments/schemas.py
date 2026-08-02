@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -25,9 +25,6 @@ class PaymentSetupRequest(BaseModel):
 
 class ConnectOnboardingRequest(PaymentSetupRequest):
     pass
-from typing import Annotated, Literal
-
-from pydantic import BaseModel, ConfigDict, Field
 
 
 class ClientPaymentStatusResponse(BaseModel):

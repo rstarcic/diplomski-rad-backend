@@ -3,6 +3,12 @@ import os
 from urllib.parse import urlencode
 
 import aiohttp
+from database import get_db
+from errors import get_error_code, raise_auth_error
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi.responses import JSONResponse, RedirectResponse
+from sqlalchemy.orm import Session
+
 from app.dependecies import get_current_user
 from app.models import User
 from app.schemas import (
@@ -35,11 +41,6 @@ from app.services.password_reset_service import request_password_reset, reset_pa
 from app.services.pkce_service import consume_pkce_session, create_pkce_session
 from app.utils.cookies import attach_auth_cookies
 from app.utils.email import send_password_reset_email, send_verification_email
-from database import get_db
-from errors import get_error_code, raise_auth_error
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
-from fastapi.responses import JSONResponse, RedirectResponse
-from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +55,17 @@ GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
 GOOGLE_AUTH_ENDPOINT = os.getenv(
     "GOOGLE_AUTH_ENDPOINT", "https://accounts.google.com/o/oauth2/v2/auth"
 )
+
+
+def _require_google_configuration() -> None:
+    if not all(
+        (
+            GOOGLE_CLIENT_ID,
+            GOOGLE_REDIRECT_URI,
+            GOOGLE_CLIENT_SECRET,
+        )
+    ):
+        raise RuntimeError("Google OAuth configuration is incomplete")
 
 
 async def _init_core_profile(user: User) -> None:
@@ -72,7 +84,10 @@ async def _init_core_profile(user: User) -> None:
                 },
                 headers={"x-internal-secret": INTERNAL_SECRET},
             ) as response:
-                if response.status not in (200, 201):
+                if response.status not in (
+                    status.HTTP_200_OK,
+                    status.HTTP_201_CREATED,
+                ):
                     logger.error(
                         "Core profile init failed with status %s for user %s",
                         response.status,
@@ -83,7 +98,7 @@ async def _init_core_profile(user: User) -> None:
 
 
 @router.post("/register/client", response_model=RegisterResponse)
-async def register_client(data: RegisterRequest, db: Session = Depends(get_db)):
+async def register_client(data: RegisterRequest, db: Session = Depends(get_db)) -> User:
     user = register_user(db, data, "client")
     await _init_core_profile(user)
     raw_token = create_verification_token(db, user.id)
@@ -92,11 +107,14 @@ async def register_client(data: RegisterRequest, db: Session = Depends(get_db)):
     except Exception as exc:
         logger.error("Failed to send verification email to %s: %s", user.email, exc)
         raise_auth_error("email_send_failed")
+
     return user
 
 
 @router.post("/register/contractor", response_model=RegisterResponse)
-async def register_contractor(data: RegisterRequest, db: Session = Depends(get_db)):
+async def register_contractor(
+    data: RegisterRequest, db: Session = Depends(get_db)
+) -> User:
     user = register_user(db, data, "contractor")
     await _init_core_profile(user)
     raw_token = create_verification_token(db, user.id)
@@ -105,19 +123,22 @@ async def register_contractor(data: RegisterRequest, db: Session = Depends(get_d
     except Exception as exc:
         logger.error("Failed to send verification email to %s: %s", user.email, exc)
         raise_auth_error("email_send_failed")
+
     return user
 
 
 @router.get("/verify-email")
-def verify_email(token: str, db: Session = Depends(get_db)):
+def verify_email(token: str, db: Session = Depends(get_db)) -> RedirectResponse:
     try:
         verify_email_token(db, token)
         return RedirectResponse(
-            url=f"{CLIENT_ENDPOINT}/login?verified=true", status_code=302
+            url=f"{CLIENT_ENDPOINT}/login?verified=true",
+            status_code=status.HTTP_302_FOUND,
         )
     except HTTPException:
         return RedirectResponse(
-            url=f"{CLIENT_ENDPOINT}/error?error=email_link_expired", status_code=302
+            url=f"{CLIENT_ENDPOINT}/error?error=email_link_expired",
+            status_code=status.HTTP_302_FOUND,
         )
 
 
@@ -125,17 +146,19 @@ def verify_email(token: str, db: Session = Depends(get_db)):
 def login_user(data: LoginRequest, response: Response, db: Session = Depends(get_db)):
     user, access_token, refresh_token = authenticate_user(db, data)
     attach_auth_cookies(response, access_token, refresh_token)
+
     return {"message": "Authenticated", "user": user}
 
 
 @router.post("/logout")
-def logout(request: Request, db: Session = Depends(get_db)):
+def logout(request: Request, db: Session = Depends(get_db)) -> JSONResponse:
     refresh_token = request.cookies.get("app_refresh")
     if refresh_token:
         revoke_session(db, refresh_token)
     response = JSONResponse({"message": "Logged out"})
     response.delete_cookie("app_access")
     response.delete_cookie("app_refresh")
+
     return response
 
 
@@ -146,11 +169,13 @@ def refresh(request: Request, response: Response, db: Session = Depends(get_db))
         raise_auth_error("not_authenticated")
     access_token, refresh_token = refresh_session(db, old_refresh)
     attach_auth_cookies(response, access_token, refresh_token)
+
     return {"message": "Refreshed"}
 
 
 @router.get("/me", response_model=AuthUserResponse)
 def get_me(current_user: User = Depends(get_current_user)):
+
     return current_user
 
 
@@ -166,26 +191,30 @@ def forgot_password(data: ForgotPasswordRequest, db: Session = Depends(get_db)):
                 "Failed to send password reset email to %s: %s", data.email, exc
             )
             raise_auth_error("email_send_failed")
+
     return {"message": "If that email exists, a reset link has been sent."}
 
 
 @router.post("/reset-password")
 def reset_password_endpoint(data: ResetPasswordRequest, db: Session = Depends(get_db)):
     reset_password(db, data.token, data.new_password)
+
     return {"message": "Password reset successfully."}
 
 
 @router.get("/google/login/start")
 def google_login_start(db: Session = Depends(get_db)):
     state, challenge = create_pkce_session(db, "login")
+
     return RedirectResponse(url=_build_google_url(state, challenge))
 
 
 @router.get("/google/register/start")
 def google_register_start(role: str, db: Session = Depends(get_db)):
-    if role not in ["client", "contractor"]:
+    if role not in ("client", "contractor"):
         raise_auth_error("invalid_role")
     state, challenge = create_pkce_session(db, role)
+
     return RedirectResponse(url=_build_google_url(state, challenge))
 
 
@@ -223,7 +252,8 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
         await _init_core_profile(user)
 
         response = RedirectResponse(
-            url=f"{CLIENT_ENDPOINT}/{user.role}/dashboard", status_code=302
+            url=f"{CLIENT_ENDPOINT}/{user.role}/dashboard",
+            status_code=status.HTTP_302_FOUND,
         )
         access_token, refresh_token = create_session(db, user)
         attach_auth_cookies(response, access_token, refresh_token)
@@ -236,6 +266,8 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
 
 
 def _build_google_url(state: str, challenge: str) -> str:
+    _require_google_configuration()
+
     params = {
         "client_id": GOOGLE_CLIENT_ID,
         "redirect_uri": GOOGLE_REDIRECT_URI,
@@ -247,5 +279,5 @@ def _build_google_url(state: str, challenge: str) -> str:
         "access_type": "offline",
         "prompt": "consent",
     }
-    return f"{GOOGLE_AUTH_ENDPOINT}?{urlencode(params)}"
+
     return f"{GOOGLE_AUTH_ENDPOINT}?{urlencode(params)}"

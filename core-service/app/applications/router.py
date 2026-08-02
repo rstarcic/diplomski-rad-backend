@@ -29,18 +29,17 @@ from app.negotiations.schemas import CounterOfferRequest, CounterOfferResponse
 from app.profiles.models import Profile
 from database import get_db
 from errors import raise_core_error
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 router = APIRouter()
 
 
 @router.patch(
-    "/jobs/{job_id}/applications/{application_id}/withdraw",
+    "/applications/{application_id}/withdraw",
     response_model=ApplicationDecisionResponse,
 )
 async def withdraw_job_application_endpoint(
-    job_id: int,
     application_id: int,
     db: Session = Depends(get_db),
     current_user: Profile = Depends(get_current_user),
@@ -50,7 +49,6 @@ async def withdraw_job_application_endpoint(
 
     return await withdraw_job_application(
         db=db,
-        job_id=job_id,
         application_id=application_id,
         contractor_id=current_user.user_id,
     )
@@ -151,7 +149,7 @@ async def get_job_application_detail_endpoint(
 @router.post(
     "/jobs/{job_id}/applications",
     response_model=ApplicationCreateResponse,
-    status_code=201,
+    status_code=status.HTTP_201_CREATED,
 )
 async def create_application_endpoint(
     job_id: int,

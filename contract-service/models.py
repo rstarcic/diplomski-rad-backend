@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from database import Base
 from sqlalchemy import CheckConstraint, DateTime, Float, Integer, String, Text
@@ -6,7 +6,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 
 def utc_now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class Contract(Base):

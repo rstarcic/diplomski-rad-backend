@@ -1,6 +1,6 @@
 import base64
 import binascii
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import uuid4
 
@@ -10,10 +10,11 @@ from app.contracts.schemas import (
     ContractParty,
     ContractTerms,
 )
-from fastapi import HTTPException
+from fastapi import HTTPException, status
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from models import Contract
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 TEMPLATES_DIR = Path(__file__).resolve().parents[1] / "documents"
@@ -34,13 +35,13 @@ SIGNABLE_CONTRACT_STATUSES = {
 
 
 def _generate_contract_number() -> str:
-    year = datetime.now(timezone.utc).year
+    year = datetime.now(UTC).year
     suffix = uuid4().hex[:8].upper()
 
     return f"CTR-{year}-{suffix}"
 
 
-def _party_snapshot(prefix: str, party: ContractParty) -> dict:
+def _party_snapshot(prefix: str, party: ContractParty) -> dict[str, object]:
     return {
         f"{prefix}_id": party.user_id,
         f"{prefix}_name": party.full_name,
@@ -51,7 +52,7 @@ def _party_snapshot(prefix: str, party: ContractParty) -> dict:
     }
 
 
-def _job_snapshot(job: ContractJob) -> dict:
+def _job_snapshot(job: ContractJob) -> dict[str, object]:
     return {
         "job_id": job.id,
         "job_title": job.title,
@@ -59,7 +60,7 @@ def _job_snapshot(job: ContractJob) -> dict:
     }
 
 
-def _contract_terms(terms: ContractTerms) -> dict:
+def _contract_terms(terms: ContractTerms) -> dict[str, object]:
     return {
         "budget_amount": terms.budget_amount,
         "budget_type": terms.budget_type,
@@ -75,7 +76,7 @@ def _validate_signature_data_url(value: str) -> str:
 
     if not value.startswith(prefix):
         raise HTTPException(
-            status_code=422,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail={
                 "code": "signature_image_invalid",
                 "message": "Signature must be a Base64-encoded PNG image.",
@@ -89,7 +90,7 @@ def _validate_signature_data_url(value: str) -> str:
         image_bytes = base64.b64decode(encoded, validate=True)
     except (ValueError, binascii.Error):
         raise HTTPException(
-            status_code=422,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail={
                 "code": "signature_image_invalid",
                 "message": "The signature image is not valid Base64 data.",
@@ -99,7 +100,7 @@ def _validate_signature_data_url(value: str) -> str:
 
     if len(image_bytes) > 500_000:
         raise HTTPException(
-            status_code=413,
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
             detail={
                 "code": "signature_image_too_large",
                 "message": "Signature image must not exceed 500 KB.",
@@ -139,7 +140,17 @@ def create_contract(
     try:
         db.commit()
         db.refresh(contract)
+    except IntegrityError:
+        db.rollback()
 
+        existing_contract = db.scalar(
+            select(Contract).where(Contract.application_id == request.application_id)
+        )
+
+        if existing_contract is not None:
+            return existing_contract
+
+        raise
     except Exception:
         db.rollback()
         raise
@@ -158,7 +169,7 @@ def update_contract_status_by_job(
 
     if contract is None:
         raise HTTPException(
-            status_code=404,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail="Contract not found.",
         )
 
@@ -170,7 +181,7 @@ def update_contract_status_by_job(
 
         if contract.status != "active":
             raise HTTPException(
-                status_code=409,
+                status_code=status.HTTP_409_CONFLICT,
                 detail="Only an active contract can be completed.",
             )
 
@@ -182,13 +193,13 @@ def update_contract_status_by_job(
 
         if contract.status == "completed":
             raise HTTPException(
-                status_code=409,
+                status_code=status.HTTP_409_CONFLICT,
                 detail="A completed contract cannot be cancelled.",
             )
 
     else:
         raise HTTPException(
-            status_code=422,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Invalid contract action.",
         )
 
@@ -212,7 +223,7 @@ def get_contract_by_id(
 
     if contract is None:
         raise HTTPException(
-            status_code=404,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail="Contract not found",
         )
 
@@ -231,7 +242,7 @@ def get_contract_by_application_id(
 
     if contract is None:
         raise HTTPException(
-            status_code=404,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail="Contract not found",
         )
 
@@ -243,7 +254,7 @@ def get_contract_by_application_id(
 def authorize_contract_party(contract: Contract, user_id: int) -> None:
     if user_id not in {contract.client_id, contract.contractor_id}:
         raise HTTPException(
-            status_code=403,
+            status_code=status.HTTP_403_FORBIDDEN,
             detail={
                 "code": "contract_access_forbidden",
                 "message": "Only a party to the contract may access it.",
@@ -263,7 +274,7 @@ def _cancel_if_signature_deadline_passed(
     }
     deadline = contract.created_at + SIGNATURE_DEADLINE
 
-    if awaiting_signatures and datetime.now(timezone.utc) >= deadline:
+    if awaiting_signatures and datetime.now(UTC) >= deadline:
         contract.status = "cancelled"
 
         try:
@@ -281,14 +292,12 @@ def sign_contract(
     signature_data_url: str,
 ) -> Contract:
     contract = db.scalar(
-        select(Contract)
-        .where(Contract.id == contract_id)
-        .with_for_update()
+        select(Contract).where(Contract.id == contract_id).with_for_update()
     )
 
     if contract is None:
         raise HTTPException(
-            status_code=404,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail="Contract not found",
         )
 
@@ -298,7 +307,7 @@ def sign_contract(
 
     if contract.status == "cancelled":
         raise HTTPException(
-            status_code=409,
+            status_code=status.HTTP_409_CONFLICT,
             detail={
                 "code": "contract_signature_deadline_expired",
                 "message": "The contract was not signed by both parties within 24 hours.",
@@ -308,18 +317,16 @@ def sign_contract(
 
     if contract.status not in SIGNABLE_CONTRACT_STATUSES:
         raise HTTPException(
-            status_code=409,
+            status_code=status.HTTP_409_CONFLICT,
             detail={
                 "code": "contract_cannot_be_signed",
-                "message": (
-                    "Only a contract awaiting signatures can be signed."
-                ),
+                "message": ("Only a contract awaiting signatures can be signed."),
                 "field": "status",
             },
         )
 
     signature = _validate_signature_data_url(signature_data_url)
-    signed_at = datetime.now(timezone.utc)
+    signed_at = datetime.now(UTC)
 
     if user_id == contract.client_id:
         contract.client_signature_url = signature
@@ -327,13 +334,16 @@ def sign_contract(
     elif user_id == contract.contractor_id:
         contract.contractor_signature_url = signature
         contract.contractor_signed_at = signed_at
-    if contract.client_signed_at and contract.contractor_signed_at:
+    if (
+        contract.client_signed_at is not None
+        and contract.contractor_signed_at is not None
+    ):
         contract.status = "active"
         contract.starts_at = contract.starts_at or signed_at + timedelta(days=1)
         contract.ends_at = contract.ends_at or contract.starts_at + timedelta(
             days=contract.duration
         )
-    elif contract.client_signed_at:
+    elif contract.client_signed_at is not None:
         contract.status = "pending_contractor_signature"
     else:
         contract.status = "pending_client_signature"
@@ -359,7 +369,7 @@ def render_contract_pdf(contract: Contract) -> bytes:
         from weasyprint import HTML
     except (ImportError, OSError) as exc:
         raise HTTPException(
-            status_code=503,
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={
                 "code": "pdf_renderer_unavailable",
                 "message": "PDF generation is temporarily unavailable.",

@@ -1,7 +1,8 @@
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from errors import raise_auth_error
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import RefreshSession, User
@@ -18,7 +19,9 @@ REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", 14))
 
 
 def register_user(db: Session, data: RegisterRequest, role: str) -> User:
-    if db.query(User).filter(User.email == data.email).first():
+    existing_user = db.scalar(select(User).where(User.email == data.email))
+
+    if existing_user is not None:
         raise_auth_error("email_already_registered")
 
     user = User(
@@ -30,14 +33,16 @@ def register_user(db: Session, data: RegisterRequest, role: str) -> User:
     db.add(user)
     db.commit()
     db.refresh(user)
+
     return user
 
 
 def authenticate_user(db: Session, data: LoginRequest) -> tuple[User, str, str]:
-    user = db.query(User).filter(User.email == data.email).first()
+    user = db.scalar(select(User).where(User.email == data.email))
+
     if (
-        not user
-        or not user.password_hash
+        user is None
+        or user.password_hash is None
         or not verify_password(data.password, user.password_hash)
     ):
         raise_auth_error("invalid_credentials")
@@ -46,6 +51,7 @@ def authenticate_user(db: Session, data: LoginRequest) -> tuple[User, str, str]:
         raise_auth_error("account_not_verified")
 
     access_token, refresh_token = create_session(db, user)
+
     return user, access_token, refresh_token
 
 
@@ -60,46 +66,49 @@ def create_session(db: Session, user: User) -> tuple[str, str]:
     )
 
     refresh_token = generate_refresh_token()
-    token_hash = hash_token(refresh_token)
-    expires_at = datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
 
-    session = db.query(RefreshSession).filter(RefreshSession.user_id == user.id).first()
-    if session:
-        session.token_hash = token_hash
-        session.expires_at = expires_at
-        session.revoked = False
-    else:
-        db.add(
-            RefreshSession(
-                user_id=user.id, token_hash=token_hash, expires_at=expires_at
-            )
-        )
+    refresh_session = RefreshSession(
+        user_id=user.id,
+        token_hash=hash_token(refresh_token),
+        expires_at=(datetime.now(UTC) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)),
+    )
 
+    db.add(refresh_session)
     db.commit()
+
     return access_token, refresh_token
 
 
-def refresh_session(db: Session, old_refresh: str) -> tuple[str, str]:
-    session = (
-        db.query(RefreshSession)
-        .filter(
+def refresh_session(
+    db: Session,
+    old_refresh: str,
+) -> tuple[str, str]:
+    refresh_session_record = db.scalar(
+        select(RefreshSession)
+        .where(
             RefreshSession.token_hash == hash_token(old_refresh),
             RefreshSession.revoked.is_(False),
         )
-        .first()
+        .with_for_update()
     )
-    if not session or session.expires_at < datetime.now(timezone.utc):
+
+    if (
+        refresh_session_record is None
+        or refresh_session_record.expires_at < datetime.now(UTC)
+    ):
         raise_auth_error("refresh_token_expired")
 
-    user = session.user
+    user = refresh_session_record.user
     new_refresh = generate_refresh_token()
-    session.token_hash = hash_token(new_refresh)
-    session.expires_at = datetime.now(timezone.utc) + timedelta(
+
+    refresh_session_record.token_hash = hash_token(new_refresh)
+    refresh_session_record.expires_at = datetime.now(UTC) + timedelta(
         days=REFRESH_TOKEN_EXPIRE_DAYS
     )
+
     db.commit()
 
-    new_access = create_access_token(
+    new_access_token = create_access_token(
         TokenPayload(
             sub=str(user.id),
             email=user.email,
@@ -107,18 +116,19 @@ def refresh_session(db: Session, old_refresh: str) -> tuple[str, str]:
             full_name=user.full_name,
         )
     )
-    return new_access, new_refresh
+
+    return new_access_token, new_refresh
 
 
 def revoke_session(db: Session, refresh_token: str) -> None:
-    session = (
-        db.query(RefreshSession)
-        .filter(
+    session = db.scalar(
+        select(RefreshSession).where(
             RefreshSession.token_hash == hash_token(refresh_token),
             RefreshSession.revoked.is_(False),
         )
-        .first()
     )
+
     if session:
         session.revoked = True
+        db.commit()
         db.commit()

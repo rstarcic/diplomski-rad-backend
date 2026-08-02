@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class PendingPaymentCreate(BaseModel):
@@ -11,4 +11,4 @@ class InternalPaymentProfileStatusResponse(BaseModel):
     payment_setup_completed: bool
     payout_setup_completed: bool
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)

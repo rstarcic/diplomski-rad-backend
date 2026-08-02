@@ -1,19 +1,17 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Literal
 
+from app.integrations.contract_client import get_contract_payment_details
+from app.internal.dashboard_schemas import PaymentDashboardItem, PaymentDashboardSummary
+from app.models import JobPayment
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.integrations.contract_client import get_contract_payment_details
-from app.internal.dashboard_schemas import (
-    PaymentDashboardItem,
-    PaymentDashboardSummary,
-)
-from app.models import JobPayment
-
 
 async def create_pending_payment(db: Session, contract_id: int) -> JobPayment:
-    existing = db.query(JobPayment).filter(JobPayment.contract_id == contract_id).first()
+    existing = db.scalar(
+        select(JobPayment).where(JobPayment.contract_id == contract_id)
+    )
     if existing:
         return existing
 
@@ -49,16 +47,14 @@ def get_payment_dashboard_summary(
         if role == "client"
         else JobPayment.contractor_id == user_id
     )
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     pending_statuses = ("pending", "overdue")
 
     totals = db.execute(
         select(
             func.coalesce(
-                func.sum(JobPayment.amount_minor).filter(
-                    JobPayment.status == "paid"
-                ),
+                func.sum(JobPayment.amount_minor).filter(JobPayment.status == "paid"),
                 0,
             ),
             func.coalesce(
@@ -74,9 +70,7 @@ def get_payment_dashboard_summary(
                 ),
                 0,
             ),
-            func.count(JobPayment.id).filter(
-                JobPayment.status.in_(pending_statuses)
-            ),
+            func.count(JobPayment.id).filter(JobPayment.status.in_(pending_statuses)),
         ).where(owner_filter)
     ).one()
 
@@ -97,6 +91,9 @@ def get_payment_dashboard_summary(
         recent=[
             PaymentDashboardItem(
                 id=item.id,
+                job_id=item.job_id,
+                application_id=item.application_id,
+                contract_id=item.contract_id,
                 job_title=item.job_title,
                 amount_minor=item.amount_minor,
                 currency=item.currency,

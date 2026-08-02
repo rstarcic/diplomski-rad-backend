@@ -1,15 +1,19 @@
-from pydantic import BaseModel, EmailStr, Field
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
+
+type UserRole = Literal["client", "contractor"]
 
 
 class AuthUserResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     email: EmailStr
-    role: str
+    role: UserRole
     full_name: str | None = None
     profile_picture: str | None = None
     email_verified: bool
-
-    model_config = {"from_attributes": True}
 
 
 class LoginRequest(BaseModel):
@@ -23,25 +27,34 @@ class LoginResponse(BaseModel):
 
 
 class RegisterRequest(BaseModel):
-    first_name: str = Field(min_length=1, max_length=100)
-    last_name: str = Field(min_length=1, max_length=100)
+    first_name: str = Field(
+        min_length=1,
+        max_length=100,
+    )
+    last_name: str = Field(
+        min_length=1,
+        max_length=100,
+    )
     email: EmailStr
-    password: str = Field(min_length=6, max_length=72)
+    password: str = Field(
+        min_length=6,
+        max_length=72,
+    )
 
 
 class RegisterResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     email: EmailStr
-    role: str
+    role: UserRole
     full_name: str
-
-    model_config = {"from_attributes": True}
 
 
 class TokenPayload(BaseModel):
     sub: str
     email: EmailStr
-    role: str
+    role: UserRole
     full_name: str | None = None
 
 
@@ -50,5 +63,8 @@ class ForgotPasswordRequest(BaseModel):
 
 
 class ResetPasswordRequest(BaseModel):
-    token: str
-    new_password: str = Field(min_length=6, max_length=72)
+    token: str = Field(min_length=1)
+    new_password: str = Field(
+        min_length=6,
+        max_length=72,
+    )

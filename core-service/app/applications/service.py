@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from app.applications.models import Application
 from app.applications.schemas import (
@@ -17,10 +17,13 @@ from app.applications.schemas import (
     MyApplicationJobSummary,
     MyApplicationSummary,
 )
-from app.integrations.client import get_contract_summary, get_payment_summary
+from app.integrations.client import (
+    get_contract_summary,
+    get_payment_summary,
+    update_contract_status_for_job,
+)
 from app.integrations.schemas import ContractPartySummary, ContractPlatformSummary
 from app.jobs.models import Job
-from app.integrations.client import update_contract_status_for_job
 from app.jobs.schemas import JobResponse
 from app.negotiations.models import Negotiation, NegotiationEdit
 from app.negotiations.schemas import NegotiationEditResponse, NegotiationSummaryResponse
@@ -31,8 +34,7 @@ from errors import raise_core_error
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
-# Testna vrijednost. Za produkciju vratiti na timedelta(days=1).
-NEGOTIATION_RESPONSE_TIMEOUT = timedelta(minutes=15)
+NEGOTIATION_RESPONSE_TIMEOUT = timedelta(days=1)
 PENDING_NEGOTIATION_STATUSES = {"pending_client", "pending_contractor"}
 
 
@@ -64,7 +66,7 @@ def create_job_application(
     if job is None:
         raise_core_error("job_not_found")
 
-    if job.deadline <= datetime.now(timezone.utc):
+    if job.deadline <= datetime.now(UTC):
         raise_core_error("application_deadline_expired")
 
     if job.status != "open":
@@ -87,9 +89,12 @@ def create_job_application(
         status="pending",
     )
     db.add(application)
-    db.commit()
-    db.refresh(application)
-
+    try:
+        db.commit()
+        db.refresh(application)
+    except Exception:
+        db.rollback()
+        raise
     return ApplicationCreateResponse.model_validate(application)
 
 
@@ -98,7 +103,6 @@ CLIENT_ALLOWED_DECISIONS = {"selected", "rejected"}
 
 async def withdraw_job_application(
     db: Session,
-    job_id: int,
     application_id: int,
     contractor_id: int,
 ) -> ApplicationDecisionResponse:
@@ -106,9 +110,7 @@ async def withdraw_job_application(
         select(Application, Job)
         .join(Job, Job.id == Application.job_id)
         .where(
-            Job.id == job_id,
             Application.id == application_id,
-            Application.job_id == job_id,
             Application.contractor_id == contractor_id,
         )
         .with_for_update()
@@ -194,11 +196,8 @@ def decide_job_application(
     if application.status != "pending":
         raise_core_error("application_decision_cannot_be_changed")
 
-    if decision == "selected":
-        if job.deadline <= datetime.now(timezone.utc):
-            raise_core_error("application_deadline_expired")
-        if job.status != "open":
-            raise_core_error("job_not_open_for_applications")
+    if decision == "selected" and job.status != "open":
+        raise_core_error("job_not_open_for_applications")
 
     try:
         if decision == "rejected":
@@ -233,9 +232,9 @@ def decide_job_application(
 
 def _as_aware_utc(value: datetime) -> datetime:
     if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
+        return value.replace(tzinfo=UTC)
 
-    return value.astimezone(timezone.utc)
+    return value.astimezone(UTC)
 
 
 def expire_stale_negotiation(
@@ -252,7 +251,7 @@ def expire_stale_negotiation(
         else negotiation.created_at
     )
 
-    elapsed = datetime.now(timezone.utc) - _as_aware_utc(last_activity_at)
+    elapsed = datetime.now(UTC) - _as_aware_utc(last_activity_at)
     if elapsed < NEGOTIATION_RESPONSE_TIMEOUT:
         return False
 
@@ -265,7 +264,7 @@ def expire_stale_negotiation(
 
     waiting_for_role = negotiation.status
     negotiation.status = "expired"
-    negotiation.updated_at = datetime.now(timezone.utc)
+    negotiation.updated_at = datetime.now(UTC)
 
     if application is not None and application.status == "selected":
         application.status = (
@@ -275,7 +274,12 @@ def expire_stale_negotiation(
     if job is not None:
         job.status = "cancelled"
 
-    db.commit()
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
     return True
 
 
@@ -283,14 +287,13 @@ def get_my_applications(
     db: Session,
     contractor_id: int,
 ) -> list[MyApplicationItemResponse]:
-    rows = (
-        db.query(Application, Job, Profile)
+    rows = db.execute(
+        select(Application, Job, Profile)
         .join(Job, Job.id == Application.job_id)
         .join(Profile, Profile.user_id == Job.client_id)
-        .filter(Application.contractor_id == contractor_id)
+        .where(Application.contractor_id == contractor_id)
         .order_by(Application.created_at.desc())
-        .all()
-    )
+    ).all()
 
     return [
         MyApplicationItemResponse(
@@ -322,16 +325,15 @@ async def get_my_application_detail(
     contractor_id: int,
     application_id: int,
 ) -> MyApplicationDetailResponse | None:
-    row = (
-        db.query(Application, Job, Profile)
+    row = db.execute(
+        select(Application, Job, Profile)
         .join(Job, Job.id == Application.job_id)
         .join(Profile, Profile.user_id == Job.client_id)
-        .filter(
+        .where(
             Application.id == application_id,
             Application.contractor_id == contractor_id,
         )
-        .one_or_none()
-    )
+    ).one_or_none()
 
     if row is None:
         return None
@@ -397,9 +399,7 @@ async def get_my_application_detail(
             )
 
     payment = (
-        await get_payment_summary(application_id)
-        if contract is not None
-        else None
+        await get_payment_summary(application_id) if contract is not None else None
     )
 
     return MyApplicationDetailResponse(
@@ -482,9 +482,7 @@ async def get_job_application_detail(
 
     contract = await get_contract_summary(application_id)
     payment = (
-        await get_payment_summary(application_id)
-        if contract is not None
-        else None
+        await get_payment_summary(application_id) if contract is not None else None
     )
 
     return JobApplicationDetailResponse(

@@ -1,5 +1,8 @@
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
+
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
 
 from app.integrations.contract_client import get_contract_payment_details
 from app.integrations.core_client import get_contractor_profile
@@ -16,10 +19,12 @@ from app.integrations.stripe_connect import (
     update_connected_account_prefill,
 )
 from app.models import JobPayment, PaymentProfile
-from app.payments.schemas import CurrentUser, PaymentSetupRequest, ConnectOnboardingRequest
+from app.payments.schemas import (
+    ConnectOnboardingRequest,
+    CurrentUser,
+    PaymentSetupRequest,
+)
 from errors import raise_payment_error
-from sqlalchemy import func, select
-from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +80,9 @@ def get_user_transactions(
 
 
 def get_payment_profile(db: Session, user_id: int) -> PaymentProfile | None:
-    return db.query(PaymentProfile).filter(PaymentProfile.user_id == user_id).first()
+    return db.scalars(
+        select(PaymentProfile).where(PaymentProfile.user_id == user_id)
+    ).first()
 
 
 def get_or_create_client_payment_profile(
@@ -114,6 +121,7 @@ def get_or_create_contractor_payment_profile(
     db.add(profile)
     db.flush()
     return profile
+
 
 async def create_contractor_connect_onboarding(
     *,
@@ -173,7 +181,7 @@ async def create_contractor_connect_onboarding(
                 current_user.id,
             )
             raise
-        
+
     account_link = create_connected_account_link(
         stripe_account_id=payment_profile.stripe_account_id,
     )
@@ -183,16 +191,17 @@ async def create_contractor_connect_onboarding(
 
     return account_link.url
 
+
 def sync_connected_account_status(db: Session, account: dict) -> None:
     stripe_account_id = account.get("id")
     if not stripe_account_id:
         raise_payment_error("invalid_webhook_payload")
 
-    profile = (
-        db.query(PaymentProfile)
-        .filter(PaymentProfile.stripe_account_id == stripe_account_id)
-        .first()
-    )
+    profile = db.scalars(
+        select(PaymentProfile).where(
+            PaymentProfile.stripe_account_id == stripe_account_id
+        )
+    ).first()
     if profile is None:
         return
 
@@ -293,7 +302,9 @@ def complete_payment_setup(
         profile.card_exp_year = card.get("exp_year")
 
     if billing_address is not None:
-        profile.billing_address = (billing_address.get("line1") or "").strip() or None
+        profile.billing_address = (
+            billing_address.get("line1") or ""
+        ).strip() or None
         profile.billing_postal_code = (
             billing_address.get("postal_code") or ""
         ).strip() or None
@@ -309,7 +320,10 @@ def complete_payment_setup(
 
 
 async def create_contract_checkout_session(
-    *, db: Session, contract_id: int, current_user_id: int
+    *,
+    db: Session,
+    contract_id: int,
+    current_user_id: int,
 ) -> str:
     contract = await get_contract_payment_details(contract_id)
     if contract.client_id != current_user_id:
@@ -317,7 +331,9 @@ async def create_contract_checkout_session(
     if contract.status != "completed":
         raise_payment_error("contract_not_payable")
 
-    payment = db.query(JobPayment).filter(JobPayment.contract_id == contract_id).first()
+    payment = db.scalars(
+        select(JobPayment).where(JobPayment.contract_id == contract_id)
+    ).first()
     if payment is None:
         payment = JobPayment(
             contract_id=contract.contract_id,
@@ -384,8 +400,11 @@ async def create_contract_checkout_session(
     return checkout.url
 
 
-def expire_pending_job_payments(db: Session, pending_timeout: timedelta) -> int:
-    cutoff = datetime.now(timezone.utc) - pending_timeout
+def expire_pending_job_payments(
+    db: Session,
+    pending_timeout: timedelta,
+) -> int:
+    cutoff = datetime.now(UTC) - pending_timeout
     payments = list(
         db.scalars(
             select(JobPayment)

@@ -1,8 +1,9 @@
 import os
+from collections.abc import Generator
 
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
-from sqlalchemy.orm import DeclarativeBase, sessionmaker
+from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 load_dotenv()
 
@@ -18,20 +19,13 @@ if not AUTH_DB:
 
 engine = create_engine(AUTH_DB, pool_pre_ping=True)
 
-SessionLocal = sessionmaker(
-    autocommit=False,
-    autoflush=False,
-    bind=engine,
-)
+SessionLocal = sessionmaker(bind=engine, autoflush=False)
 
 
-def get_db():
-    db = SessionLocal()
-    try:
+def get_db() -> Generator[Session, None, None]:
+    with SessionLocal() as db:
         yield db
-    finally:
-        db.close()
 
 
-def init_db():
+def init_db() -> None:
     Base.metadata.create_all(bind=engine)

@@ -190,12 +190,16 @@ def get_reviews_for_target(
     target_type: str,
     target_id: int,
 ) -> TargetReviewsResponse:
-    reviews = (
-        db.query(Review)
-        .options(joinedload(Review.reviewer))
-        .filter(Review.target_type == target_type, Review.target_id == target_id)
-        .order_by(Review.created_at.desc())
-        .all()
+    reviews = list(
+        db.scalars(
+            select(Review)
+            .options(joinedload(Review.reviewer))
+            .where(
+                Review.target_type == target_type,
+                Review.target_id == target_id,
+            )
+            .order_by(Review.created_at.desc())
+        ).all()
     )
 
     return TargetReviewsResponse(

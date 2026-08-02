@@ -2,6 +2,7 @@ import logging
 import os
 
 import stripe
+
 from app.integrations.stripe_client import stripe_client
 from errors import payment_error
 
@@ -26,7 +27,6 @@ def create_stripe_customer(
     email: str,
     address: dict | None = None,
 ):
-
     params = {
         "name": name,
         "email": email,
@@ -71,7 +71,12 @@ def update_stripe_customer(
         raise payment_error("stripe_customer_update_failed") from exc
 
 
-def create_checkout_session(*, payment, stripe_customer_id: str, contractor_stripe_account_id: str):
+def create_checkout_session(
+    *,
+    payment,
+    stripe_customer_id: str,
+    contractor_stripe_account_id: str,
+):
     attempt = payment.checkout_attempt + 1
     application_url = (
         f"{FRONTEND_URL}/client/jobs/{payment.job_id}"
@@ -120,7 +125,9 @@ def create_checkout_session(*, payment, stripe_customer_id: str, contractor_stri
                 },
             },
             options={
-                "idempotency_key": f"checkout-payment-{payment.id}-attempt-{attempt}"
+                "idempotency_key": (
+                    f"checkout-payment-{payment.id}-attempt-{attempt}"
+                )
             },
         )
     except stripe.StripeError as exc:

@@ -25,7 +25,7 @@ from app.pagination import PaginatedResponse, PaginationParams
 from app.profiles.models import Profile
 from database import get_db
 from errors import raise_core_error
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 router = APIRouter()
@@ -36,7 +36,7 @@ def mark_job_done_endpoint(
     job_id: int,
     db: Session = Depends(get_db),
     current_user: Profile = Depends(get_current_user),
-):
+) -> JobResponse:
     return mark_job_done(db, job_id, current_user)
 
 
@@ -60,6 +60,9 @@ async def mark_job_incomplete_endpoint(
 
 @router.get("/", response_model=PaginatedResponse[JobSearchItemResponse])
 def get_open_jobs_endpoint(
+    db: Session = Depends(get_db),
+    current_user: Profile = Depends(get_current_user),
+    pagination: PaginationParams = Depends(),
     search: str | None = Query(default=None, max_length=100),
     category: str | None = Query(default=None),
     location: str | None = Query(default=None),
@@ -67,9 +70,6 @@ def get_open_jobs_endpoint(
     budget_type: str | None = Query(default=None),
     min_budget: float | None = Query(default=None, ge=0),
     max_budget: float | None = Query(default=None, ge=0),
-    pagination: PaginationParams = Depends(),
-    db: Session = Depends(get_db),
-    current_user: Profile = Depends(get_current_user),
 ):
     if current_user.role != "contractor":
         raise_core_error("forbidden")
@@ -99,7 +99,11 @@ def get_filter_options_endpoint(
     return get_job_filter_options(db)
 
 
-@router.post("/", response_model=JobResponse, status_code=201)
+@router.post(
+    "/",
+    response_model=JobResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 async def post_job_endpoint(
     data: JobCreate,
     db: Session = Depends(get_db),
@@ -118,7 +122,7 @@ async def post_job_endpoint(
     return create_job(db, current_user.user_id, data)
 
 
-@router.get("/me", response_model=list[JobSummaryResponse], status_code=200)
+@router.get("/me", response_model=list[JobSummaryResponse])
 async def get_my_jobs_endpoint(
     db: Session = Depends(get_db),
     current_user: Profile = Depends(get_current_user),
@@ -150,7 +154,7 @@ def get_job_details_endpoint(
     return details
 
 
-@router.get("/{job_id}", response_model=JobResponse, status_code=200)
+@router.get("/{job_id}", response_model=JobResponse)
 def get_job_by_id_endpoint(
     job_id: int,
     db: Session = Depends(get_db),

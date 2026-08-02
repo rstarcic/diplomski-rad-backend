@@ -1,5 +1,6 @@
 import asyncio
 import os
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import timedelta
 
@@ -10,7 +11,7 @@ from app.payments.router import router as payments_router
 from app.payments.service import expire_pending_job_payments
 from database import SessionLocal, init_db
 from dotenv import load_dotenv
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -57,8 +58,7 @@ def get_allowed_origins() -> list[str]:
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Kreira tablice definirane SQLAlchemy modelima.
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     init_db()
 
     expiration_task = asyncio.create_task(payment_expiration_worker())
@@ -88,7 +88,7 @@ async def validation_exception_handler(
     first_error = exc.errors()[0]
 
     return JSONResponse(
-        status_code=422,
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         content={
             "detail": {
                 "code": "validation_error",

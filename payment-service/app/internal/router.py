@@ -41,7 +41,10 @@ def get_payment_profile_status(
         select(PaymentProfile).where(PaymentProfile.user_id == user_id)
     )
     if profile is None:
-        raise HTTPException(status_code=404, detail="Payment profile not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Payment profile not found",
+        )
 
     return profile
 
@@ -66,7 +69,10 @@ def get_payment_by_application(
         select(JobPayment).where(JobPayment.application_id == application_id)
     )
     if payment is None:
-        raise HTTPException(status_code=404, detail="Payment not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Payment not found",
+        )
 
     return payment
 

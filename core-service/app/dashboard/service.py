@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from app.applications.models import Application
 from app.dashboard.schemas import (
@@ -15,7 +15,7 @@ from app.integrations.client import (
 from app.jobs.models import Job
 from app.profiles.models import Profile
 from app.reviews.models import Review
-from sqlalchemy import and_, func, or_
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 
@@ -24,10 +24,15 @@ def _money(amount_minor: int, currency: str = "EUR") -> str:
     return f"{symbol}{amount_minor / 100:,.2f}"
 
 
-def _relative_time(value: datetime) -> str:
+def _aware_utc(value: datetime) -> datetime:
     if value.tzinfo is None:
-        value = value.replace(tzinfo=timezone.utc)
-    seconds = max(0, int((datetime.now(timezone.utc) - value).total_seconds()))
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
+
+
+def _relative_time(value: datetime) -> str:
+    value = _aware_utc(value)
+    seconds = max(0, int((datetime.now(UTC) - value).total_seconds()))
     if seconds < 60:
         return "Just now"
     if seconds < 3600:
@@ -54,11 +59,11 @@ async def get_dashboard(
 
 
 def _client_dashboard(db, user, contracts, payments) -> DashboardResponse:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    week_start = (
-        now - timedelta(days=now.weekday())
-    ).replace(hour=0, minute=0, second=0, microsecond=0)
+    week_start = (now - timedelta(days=now.weekday())).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
     active_work_statuses = (
         "awaiting_contract",
         "in_progress",
@@ -70,112 +75,169 @@ def _client_dashboard(db, user, contracts, payments) -> DashboardResponse:
     )
 
     active_jobs = (
-        db.query(func.count(Job.id))
-        .filter(Job.client_id == user.user_id, active_job_filter)
-        .scalar()
-    )
-    new_jobs = (
-        db.query(func.count(Job.id))
-        .filter(
-            Job.client_id == user.user_id,
-            active_job_filter,
-            Job.created_at >= month_start,
+        db.scalar(
+            select(func.count(Job.id)).where(
+                Job.client_id == user.user_id,
+                active_job_filter,
+            )
         )
-        .scalar()
-    )
-    applications = (
-        db.query(func.count(Application.id))
-        .join(Job, Job.id == Application.job_id)
-        .filter(Job.client_id == user.user_id, Application.status != "withdrawn")
-        .scalar()
-    )
-    weekly_applications = (
-        db.query(func.count(Application.id))
-        .join(Job, Job.id == Application.job_id)
-        .filter(
-            Job.client_id == user.user_id,
-            Application.status != "withdrawn",
-            Application.created_at >= week_start,
-        )
-        .scalar()
+        or 0
     )
 
-    recent_applications = (
-        db.query(Application, Job, Profile)
+    new_jobs = (
+        db.scalar(
+            select(func.count(Job.id)).where(
+                Job.client_id == user.user_id,
+                active_job_filter,
+                Job.created_at >= month_start,
+            )
+        )
+        or 0
+    )
+
+    applications = (
+        db.scalar(
+            select(func.count(Application.id))
+            .join(Job, Job.id == Application.job_id)
+            .where(
+                Job.client_id == user.user_id,
+                Application.status != "withdrawn",
+            )
+        )
+        or 0
+    )
+
+    weekly_applications = (
+        db.scalar(
+            select(func.count(Application.id))
+            .join(Job, Job.id == Application.job_id)
+            .where(
+                Job.client_id == user.user_id,
+                Application.status != "withdrawn",
+                Application.created_at >= week_start,
+            )
+        )
+        or 0
+    )
+
+    recent_applications = db.execute(
+        select(Application, Job, Profile)
         .join(Job, Job.id == Application.job_id)
-        .join(Profile, Profile.user_id == Application.contractor_id)
-        .filter(Job.client_id == user.user_id)
+        .join(
+            Profile,
+            Profile.user_id == Application.contractor_id,
+        )
+        .where(Job.client_id == user.user_id)
         .order_by(Application.created_at.desc())
         .limit(5)
-        .all()
-    )
-    activities = [
-        DashboardListItem(
-            id=f"application-{application.id}",
-            title="New application received",
-            subtitle=(
-                f"{contractor.full_name or 'A contractor'} applied to "
-                f"{job.title}."
+    ).all()
+
+    activity_entries = [
+        (
+            DashboardListItem(
+                id=f"application-{application.id}",
+                type="application_received",
+                job_id=job.id,
+                application_id=application.id,
+                title="New application received",
+                subtitle=(
+                    f"{contractor.full_name or 'A contractor'} applied to "
+                    f"{job.title}."
+                ),
+                meta=_relative_time(application.created_at),
             ),
-            meta=_relative_time(application.created_at),
+            application.created_at,
         )
         for application, job, contractor in recent_applications
     ]
-    activities.extend(
-        DashboardListItem(
-            id=f"payment-{item.id}",
-            title="Payment updated",
-            subtitle=f"{item.job_title} payment is {item.status}.",
-            meta=_relative_time(item.updated_at),
+    activity_entries.extend(
+        (
+            DashboardListItem(
+                id=f"payment-{item.id}",
+                type="payment_updated",
+                job_id=item.job_id,
+                application_id=item.application_id,
+                contract_id=item.contract_id,
+                payment_id=item.id,
+                title="Payment updated",
+                subtitle=f"{item.job_title} payment is {item.status}.",
+                meta=_relative_time(item.updated_at),
+            ),
+            item.updated_at,
         )
         for item in payments.recent
     )
-    activities = sorted(
-        activities,
-        key=lambda item: item.meta == "Just now",
-        reverse=True,
-    )[:5]
+    activities = [
+        item
+        for item, _timestamp in sorted(
+            activity_entries,
+            key=lambda entry: _aware_utc(entry[1]),
+            reverse=True,
+        )[:5]
+    ]
 
-    pending_rows = (
-        db.query(Job, func.count(Application.id))
+    pending_rows = db.execute(
+        select(
+            Job,
+            func.count(Application.id),
+            func.max(Application.created_at),
+        )
         .join(Application, Application.job_id == Job.id)
-        .filter(
+        .where(
             Job.client_id == user.user_id,
             Job.status == "open",
             Application.status == "pending",
         )
         .group_by(Job.id)
-        .order_by(func.count(Application.id).desc())
-        .limit(3)
-        .all()
-    )
-    actions = [
-        DashboardListItem(
-            id=f"review-applications-{job.id}",
-            title="Review new applications",
-            subtitle=(
-                f"{count} candidate{'s' if count != 1 else ''} waiting for "
-                f"feedback for {job.title}."
-            ),
-            meta="High priority",
-            metaAccent="warning",
-        )
-        for job, count in pending_rows
-    ]
-    if contracts.pending_signature_count:
-        actions.append(
+    ).all()
+
+    action_entries = [
+        (
             DashboardListItem(
-                id="pending-contract-signatures",
+                id=f"contract-signature-{contract.id}",
+                type="contract_signature_required",
+                job_id=contract.job_id,
+                application_id=contract.application_id,
+                contract_id=contract.id,
                 title="Contract signature required",
                 subtitle=(
-                    f"{contracts.pending_signature_count} contract"
-                    f"{'s are' if contracts.pending_signature_count != 1 else ' is'} "
-                    "waiting for signatures."
+                    f"The contract for {contract.job_title} needs your "
+                    "signature."
                 ),
                 meta="Due soon",
                 metaAccent="warning",
-            )
+            ),
+            contract.updated_at,
         )
+        for contract in contracts.pending_signatures
+    ]
+    action_entries.extend(
+        (
+            DashboardListItem(
+                id=f"review-applications-{job.id}",
+                type="review_applications",
+                job_id=job.id,
+                title="Review new applications",
+                subtitle=(
+                    f"{count} candidate"
+                    f"{'s' if count != 1 else ''} waiting for "
+                    f"feedback for {job.title}."
+                ),
+                meta="High priority",
+                metaAccent="warning",
+            ),
+            latest_application_at,
+        )
+        for job, count, latest_application_at in pending_rows
+    )
+    actions = [
+        item
+        for item, _timestamp in sorted(
+            action_entries,
+            key=lambda entry: _aware_utc(entry[1]),
+            reverse=True,
+        )[:3]
+    ]
 
     return DashboardResponse(
         stats_cards=[
@@ -208,30 +270,30 @@ def _client_dashboard(db, user, contracts, payments) -> DashboardResponse:
             ),
         ],
         recent_activity=activities,
-        pending_actions=actions[:3],
+        pending_actions=actions,
         payment_summary=_payment_summary(payments, client=True),
     )
 
 
 def _contractor_dashboard(db, user, contracts, payments) -> DashboardResponse:
-    terminal_jobs = (
-        db.query(Job.status, func.count(Job.id))
+    terminal_jobs = db.execute(
+        select(Job.status, func.count(Job.id))
         .join(Application, Application.job_id == Job.id)
-        .filter(
+        .where(
             Application.contractor_id == user.user_id,
             Application.status == "accepted",
             Job.status.in_(("completed_by_client", "incomplete")),
         )
         .group_by(Job.status)
-        .all()
-    )
+    ).all()
+
     totals = dict(terminal_jobs)
     completed = totals.get("completed_by_client", 0)
     terminal_total = completed + totals.get("incomplete", 0)
     success_rate = round(completed / terminal_total * 100) if terminal_total else 0
 
-    rating = (
-        db.query(
+    rating = db.scalar(
+        select(
             func.avg(
                 (
                     Review.communication_rating
@@ -241,85 +303,137 @@ def _contractor_dashboard(db, user, contracts, payments) -> DashboardResponse:
                 )
                 / 4
             )
-        )
-        .filter(
+        ).where(
             Review.target_type == "contractor",
             Review.target_id == user.user_id,
         )
-        .scalar()
     )
+
     rating = float(rating or 0)
 
-    recent_applications = (
-        db.query(Application, Job)
+    recent_applications = db.execute(
+        select(Application, Job)
         .join(Job, Job.id == Application.job_id)
-        .filter(Application.contractor_id == user.user_id)
+        .where(Application.contractor_id == user.user_id)
         .order_by(Application.updated_at.desc())
         .limit(5)
-        .all()
-    )
-    activities = [
-        DashboardListItem(
-            id=f"application-{application.id}",
-            title=(
-                "Application approved"
-                if application.status == "accepted"
-                else "Application updated"
+    ).all()
+
+    activity_entries = [
+        (
+            DashboardListItem(
+                id=f"application-{application.id}",
+                type=(
+                    "application_approved"
+                    if application.status == "accepted"
+                    else "application_updated"
+                ),
+                job_id=job.id,
+                application_id=application.id,
+                title=(
+                    "Application approved"
+                    if application.status == "accepted"
+                    else "Application updated"
+                ),
+                subtitle=(f"Your application for {job.title} is {application.status}."),
+                meta=_relative_time(application.updated_at),
             ),
-            subtitle=f"Your application for {job.title} is {application.status}.",
-            meta=_relative_time(application.updated_at),
+            application.updated_at,
         )
         for application, job in recent_applications
     ]
-    activities.extend(
-        DashboardListItem(
-            id=f"payment-{item.id}",
-            title="Payment released" if item.status == "paid" else "Payment updated",
-            subtitle=(
-                f"{_money(item.amount_minor, item.currency)} for "
-                f"{item.job_title} is {item.status}."
+    activity_entries.extend(
+        (
+            DashboardListItem(
+                id=f"payment-{item.id}",
+                type=(
+                    "payment_released" if item.status == "paid" else "payment_updated"
+                ),
+                job_id=item.job_id,
+                application_id=item.application_id,
+                contract_id=item.contract_id,
+                payment_id=item.id,
+                title=(
+                    "Payment released" if item.status == "paid" else "Payment updated"
+                ),
+                subtitle=(
+                    f"{_money(item.amount_minor, item.currency)} for "
+                    f"{item.job_title} is {item.status}."
+                ),
+                meta=_relative_time(item.updated_at),
             ),
-            meta=_relative_time(item.updated_at),
+            item.updated_at,
         )
         for item in payments.recent
     )
+    activities = [
+        item
+        for item, _timestamp in sorted(
+            activity_entries,
+            key=lambda entry: _aware_utc(entry[1]),
+            reverse=True,
+        )[:5]
+    ]
 
-    actions = []
-    if contracts.pending_signature_count:
-        actions.append(
+    action_entries = [
+        (
             DashboardListItem(
-                id="pending-contract-signatures",
-                title="Client waiting for signature",
+                id=f"contract-signature-{contract.id}",
+                type="contract_signature_required",
+                job_id=contract.job_id,
+                application_id=contract.application_id,
+                contract_id=contract.id,
+                title="Contract signature required",
                 subtitle=(
-                    f"{contracts.pending_signature_count} contract"
-                    f"{'s need' if contracts.pending_signature_count != 1 else ' needs'} "
-                    "your attention."
+                    f"The contract for {contract.job_title} needs your "
+                    "signature."
                 ),
                 meta="Due soon",
                 metaAccent="warning",
-            )
+            ),
+            contract.updated_at,
         )
-    pending_applications = (
-        db.query(func.count(Application.id))
-        .filter(
+        for contract in contracts.pending_signatures
+    ]
+
+    pending_applications = db.execute(
+        select(
+            func.count(Application.id),
+            func.max(Application.updated_at),
+        ).where(
             Application.contractor_id == user.user_id,
             Application.status.in_(("pending", "selected")),
         )
-        .scalar()
-    )
-    if pending_applications:
-        actions.append(
-            DashboardListItem(
-                id="pending-applications",
-                title="Applications in progress",
-                subtitle=(
-                    f"You have {pending_applications} application"
-                    f"{'s' if pending_applications != 1 else ''} awaiting a decision."
+    ).one()
+    pending_application_count, latest_application_at = pending_applications
+
+    if pending_application_count and latest_application_at is not None:
+        action_entries.append(
+            (
+                DashboardListItem(
+                    id="pending-applications",
+                    type="applications_in_progress",
+                    title="Applications in progress",
+                    subtitle=(
+                        f"You have {pending_application_count} application"
+                        f"{'s' if pending_application_count != 1 else ''} "
+                        "awaiting a decision."
+                    ),
+                    meta="In review",
+                    metaAccent="info",
                 ),
-                meta="In review",
-                metaAccent="info",
+                latest_application_at,
             )
         )
+
+    actions = [
+        item
+        for item, _timestamp in sorted(
+            action_entries,
+            key=lambda entry: _aware_utc(entry[1]),
+            reverse=True,
+        )
+    ]
 
     return DashboardResponse(
         stats_cards=[
@@ -351,7 +465,7 @@ def _contractor_dashboard(db, user, contracts, payments) -> DashboardResponse:
                 ),
             ),
         ],
-        recent_activity=activities[:5],
+        recent_activity=activities,
         pending_actions=actions,
         payment_summary=_payment_summary(payments, client=False),
     )
@@ -360,12 +474,10 @@ def _contractor_dashboard(db, user, contracts, payments) -> DashboardResponse:
 def _payment_summary(payments, *, client: bool) -> DashboardPaymentSummary:
     return DashboardPaymentSummary(
         availableBalance=(
-            f"{payments.currency} "
-            f"{payments.paid_total_minor / 100:,.2f}"
+            f"{payments.currency} " f"{payments.paid_total_minor / 100:,.2f}"
         ),
         pendingPayments=(
-            f"{payments.currency} "
-            f"{payments.pending_total_minor / 100:,.2f}"
+            f"{payments.currency} " f"{payments.pending_total_minor / 100:,.2f}"
         ),
         nextPayoutDate="Not scheduled",
         status=(

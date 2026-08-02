@@ -1,10 +1,6 @@
-from datetime import datetime, timedelta, timezone
-from decimal import Decimal, ROUND_HALF_UP
+from datetime import UTC, datetime, timedelta
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Literal
-
-from fastapi import HTTPException, status
-from sqlalchemy import func, select
-from sqlalchemy.orm import Session
 
 from app.contracts.service import get_contract_by_id
 from app.internal.dashboard_schemas import (
@@ -12,10 +8,13 @@ from app.internal.dashboard_schemas import (
     ContractDashboardSummary,
 )
 from app.internal.schemas import ContractPaymentDetailsResponse
+from fastapi import HTTPException, status
 from models import Contract
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
 
 
-def to_minor_units(amount: float | Decimal) -> int:
+def _to_minor_units(amount: float | Decimal) -> int:
     decimal_amount = Decimal(str(amount))
 
     return int(
@@ -57,7 +56,7 @@ def get_contract_payment_details(
         client_email=contract.client_email,
         contractor_id=contract.contractor_id,
         job_title=contract.job_title,
-        amount_minor=to_minor_units(contract.budget_amount),
+        amount_minor=_to_minor_units(contract.budget_amount),
         currency=contract.currency.lower(),
         status=contract.status,
     )
@@ -73,7 +72,7 @@ def get_contract_dashboard_summary(
         if role == "client"
         else Contract.contractor_id == user_id
     )
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     ending_soon = now + timedelta(days=7)
     pending_statuses = (
         ("pending_signatures", "pending_client_signature")
@@ -83,19 +82,23 @@ def get_contract_dashboard_summary(
 
     counts = db.execute(
         select(
-            func.count(Contract.id).filter(Contract.status == "active"),
-            func.count(Contract.id).filter(
-                Contract.status.in_(("active", "completed"))
-            ),
-            func.count(Contract.id).filter(
+            func.count(Contract.id)
+            .filter(Contract.status == "active")
+            .label("active_count"),
+            func.count(Contract.id)
+            .filter(Contract.status.in_(("active", "completed")))
+            .label("signed_count"),
+            func.count(Contract.id)
+            .filter(
                 Contract.status == "active",
-                Contract.ends_at.isnot(None),
+                Contract.ends_at.is_not(None),
                 Contract.ends_at >= now,
                 Contract.ends_at <= ending_soon,
-            ),
-            func.count(Contract.id).filter(
-                Contract.status.in_(pending_statuses)
-            ),
+            )
+            .label("ending_soon_count"),
+            func.count(Contract.id)
+            .filter(Contract.status.in_(pending_statuses))
+            .label("pending_signature_count"),
         ).where(owner_filter)
     ).one()
 
@@ -106,18 +109,31 @@ def get_contract_dashboard_summary(
         .limit(5)
     ).all()
 
+    pending_signatures = db.scalars(
+        select(Contract)
+        .where(
+            owner_filter,
+            Contract.status.in_(pending_statuses),
+        )
+        .order_by(Contract.updated_at.desc())
+        .limit(5)
+    ).all()
+
+    def dashboard_item(contract: Contract) -> ContractDashboardItem:
+        return ContractDashboardItem(
+            id=contract.id,
+            job_id=contract.job_id,
+            application_id=contract.application_id,
+            job_title=contract.job_title,
+            status=contract.status,
+            updated_at=contract.updated_at,
+        )
+
     return ContractDashboardSummary(
-        active_count=counts[0],
-        signed_count=counts[1],
-        ending_soon_count=counts[2],
-        pending_signature_count=counts[3],
-        recent=[
-            ContractDashboardItem(
-                id=item.id,
-                job_title=item.job_title,
-                status=item.status,
-                updated_at=item.updated_at,
-            )
-            for item in recent
-        ],
+        active_count=counts.active_count,
+        signed_count=counts.signed_count,
+        ending_soon_count=counts.ending_soon_count,
+        pending_signature_count=counts.pending_signature_count,
+        recent=[dashboard_item(item) for item in recent],
+        pending_signatures=[dashboard_item(item) for item in pending_signatures],
     )

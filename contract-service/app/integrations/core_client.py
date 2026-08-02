@@ -1,10 +1,9 @@
-import asyncio
 import os
 from pathlib import Path
 
 import aiohttp
 from dotenv import load_dotenv
-from fastapi import HTTPException
+from fastapi import HTTPException, status
 
 load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
@@ -23,15 +22,15 @@ async def notify_job_contract_activated(job_id: int) -> None:
                 f"{CORE_SERVICE_URL}/internal/jobs/{job_id}/contract-activated",
                 headers={"x-internal-secret": INTERNAL_SECRET},
             ) as response:
-                if response.status >= 400:
+                if response.status >= status.HTTP_400_BAD_REQUEST:
                     _sync_error()
-    except (asyncio.TimeoutError, aiohttp.ClientError):
+    except (TimeoutError, aiohttp.ClientError):
         _sync_error()
 
 
 def _sync_error() -> None:
     raise HTTPException(
-        status_code=502,
+        status_code=status.HTTP_502_BAD_GATEWAY,
         detail={
             "code": "job_activation_sync_failed",
             "message": (

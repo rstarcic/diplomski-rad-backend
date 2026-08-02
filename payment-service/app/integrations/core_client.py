@@ -1,4 +1,3 @@
-import asyncio
 import os
 
 import aiohttp
@@ -25,10 +24,10 @@ async def get_contractor_profile(user_id: int) -> ContractorProfile:
             ) as response:
                 if response.status == status.HTTP_404_NOT_FOUND:
                     raise_payment_error("contractor_profile_not_found")
-                if response.status >= 400:
+                if response.status >= status.HTTP_400_BAD_REQUEST:
                     raise_payment_error("core_service_failed")
                 data = await response.json()
-    except asyncio.TimeoutError as exc:
+    except TimeoutError as exc:
         raise payment_error("core_service_timeout") from exc
     except aiohttp.ClientError as exc:
         raise payment_error("core_service_unavailable") from exc

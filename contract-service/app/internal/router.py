@@ -1,24 +1,26 @@
 from typing import Literal
 
-from fastapi import APIRouter, Depends, status
-from sqlalchemy.orm import Session
-
 from app.contracts.schemas import ContractCreateRequest, ContractResponse
-from app.contracts.service import create_contract, update_contract_status_by_job, get_contract_by_application_id
+from app.contracts.service import (
+    create_contract,
+    get_contract_by_application_id,
+    update_contract_status_by_job,
+)
+from app.internal.dashboard_schemas import ContractDashboardSummary
 from app.internal.schemas import ContractPaymentDetailsResponse
 from app.internal.service import (
     get_contract_dashboard_summary,
     get_contract_payment_details,
 )
 from database import get_db
-from dependencies import _verify_internal
-from app.internal.dashboard_schemas import ContractDashboardSummary
-
+from dependencies import verify_internal
+from fastapi import APIRouter, Depends, status
+from sqlalchemy.orm import Session
 
 router = APIRouter(
     prefix="/internal/contracts",
     tags=["internal-contracts"],
-    dependencies=[Depends(_verify_internal)],
+    dependencies=[Depends(verify_internal)],
 )
 
 

@@ -5,6 +5,9 @@ from pydantic import BaseModel
 
 class PaymentDashboardItem(BaseModel):
     id: int
+    job_id: int
+    application_id: int
+    contract_id: int
     job_title: str
     amount_minor: int
     currency: str

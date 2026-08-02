@@ -1,14 +1,13 @@
 import os
 import smtplib
-from pathlib import Path
-
-from dotenv import load_dotenv
-
 from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from html import escape
+from pathlib import Path
 
+from dotenv import load_dotenv
+from fastapi import logger
 
 load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
@@ -93,12 +92,20 @@ def send_contract_email(
             server.login(SMTP_USER, SMTP_PASSWORD)
             server.sendmail(SMTP_USER, to_email, msg.as_string())
     except smtplib.SMTPResponseException as exc:
-      error = exc.smtp_error.decode(errors="replace")
-      raise ContractEmailError(
-          f"Google SMTP error {exc.smtp_code}: {error}"
-      ) from exc
+        if isinstance(exc.smtp_error, bytes):
+            smtp_error = exc.smtp_error.decode(errors="replace")
+        else:
+            smtp_error = str(exc.smtp_error)
+
+        logger.exception(
+            "SMTP response error %s: %s",
+            exc.smtp_code,
+            smtp_error,
+        )
+
+        raise ContractEmailError("Email delivery failed.") from exc
 
     except (OSError, smtplib.SMTPException) as exc:
-        raise ContractEmailError(
-            f"SMTP connection error: {type(exc).__name__}: {exc}"
-        ) from exc
+        logger.exception("SMTP connection or delivery failed")
+
+        raise ContractEmailError("Email delivery failed.") from exc

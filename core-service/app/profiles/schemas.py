@@ -4,6 +4,7 @@ from typing import Any, Literal
 from pydantic import (
     AliasPath,
     BaseModel,
+    ConfigDict,
     EmailStr,
     Field,
     model_validator,
@@ -89,7 +90,7 @@ class InternalContractorProfileResponse(BaseModel):
     city: str | None = None
     country: str | None = None
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)
 
 
 # =========================================================
@@ -114,14 +115,14 @@ class ProfileResponse(BaseModel):
     has_uploaded_picture: bool = False
     created_at: datetime
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)
 
 
 class SkillResponse(BaseModel):
     id: int
     name: str
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)
 
 
 class PortfolioItemResponse(BaseModel):
@@ -132,7 +133,7 @@ class PortfolioItemResponse(BaseModel):
     project_url: str | None = None
     created_at: datetime
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)
 
 
 # =========================================================

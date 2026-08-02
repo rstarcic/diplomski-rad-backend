@@ -2,6 +2,7 @@ import os
 
 import stripe
 from fastapi import APIRouter, Depends, Header, Query, Request, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.dependencies import get_current_user, get_current_user_id
@@ -34,13 +35,28 @@ STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
 
 @router.get("/status", response_model=PaymentStatusResponse)
 def get_my_payment_status(
-    current_user_id: int = Depends(get_current_user_id),
+    current_user: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    profile = get_payment_profile(db, current_user_id)
-    if profile is None:
-        raise_payment_error("payment_profile_not_found")
-    return profile
+    profile = get_payment_profile(db, current_user.id)
+    if profile is not None:
+        return profile
+
+    if current_user.role == "client":
+        return {
+            "user_id": current_user.id,
+            "role": "client",
+            "payment_setup_completed": False,
+        }
+
+    return {
+        "user_id": current_user.id,
+        "role": "contractor",
+        "payout_setup_completed": False,
+        "details_submitted": False,
+        "payouts_enabled": False,
+        "charges_enabled": False,
+    }
 
 
 @router.get("/transactions", response_model=TransactionListResponse)
@@ -104,6 +120,8 @@ async def create_connect_onboarding_endpoint(
         data=data,
     )
     return ConnectOnboardingResponse(onboarding_url=onboarding_url)
+
+
 @router.post("/webhooks/stripe", include_in_schema=False)
 async def stripe_webhook_endpoint(
     request: Request,
@@ -159,14 +177,12 @@ async def stripe_webhook_endpoint(
                 raise_payment_error("invalid_webhook_payload")
 
         if payment_intent_id:
-            return (
-                db.query(JobPayment)
-                .filter(
+            return db.scalars(
+                select(JobPayment).where(
                     JobPayment.stripe_payment_intent_id
                     == payment_intent_id
                 )
-                .first()
-            )
+            ).first()
 
         return None
 
@@ -431,14 +447,12 @@ async def stripe_webhook_endpoint(
         if not setup_intent.customer:
             return {"received": True}
 
-        profile = (
-            db.query(PaymentProfile)
-            .filter(
+        profile = db.scalars(
+            select(PaymentProfile).where(
                 PaymentProfile.stripe_customer_id
                 == str(setup_intent.customer)
             )
-            .first()
-        )
+        ).first()
 
         if profile is None:
             return {"received": True}
@@ -481,6 +495,7 @@ async def stripe_webhook_endpoint(
         return {"received": True}
 
     return {"received": True}
+
 
 @router.post(
     "/contracts/{contract_id}/checkout-session",

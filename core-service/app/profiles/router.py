@@ -18,13 +18,17 @@ from app.profiles.services.public_profile_service import (
 )
 from database import get_db
 from errors import raise_core_error
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.orm import Session
 
 router = APIRouter()
 
 
-@router.post("/init", response_model=ProfileResponse, status_code=201)
+@router.post(
+    "/init",
+    response_model=ProfileResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 def init_profile(
     data: ProfileCreate,
     db: Session = Depends(get_db),

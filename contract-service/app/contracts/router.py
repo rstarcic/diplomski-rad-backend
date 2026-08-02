@@ -1,10 +1,6 @@
 import asyncio
 
-from app.contracts.schemas import (
-    ContractEmailResponse,
-    ContractResponse,
-    ContractSignatureRequest,
-)
+from app.contracts.schemas import ContractEmailResponse, ContractResponse, ContractSignatureRequest
 from app.contracts.service import (
     authorize_contract_party,
     get_contract_by_application_id,
@@ -17,8 +13,9 @@ from app.documents.email_service import ContractEmailError, send_contract_email
 from app.integrations.core_client import notify_job_contract_activated
 from database import get_db
 from dependencies import get_current_user_id
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, logger, status
 from fastapi.responses import HTMLResponse, Response
+from models import Contract
 from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/contracts", tags=["contracts"])
@@ -38,7 +35,7 @@ def get_contract_by_application_endpoint(
 ):
     contract = get_contract_by_application_id(db=db, application_id=application_id)
     authorize_contract_party(contract, user_id)
-    return ContractResponse.model_validate(contract)
+    return contract
 
 
 @router.get("/{contract_id}", response_model=ContractResponse)
@@ -102,7 +99,7 @@ async def email_contract_endpoint(
     contract = _authorized_contract(contract_id, user_id, db)
     if contract.status not in {"active", "completed"}:
         raise HTTPException(
-            409,
+            status_code=status.HTTP_409_CONFLICT,
             detail={
                 "code": "contract_not_active",
                 "message": "The contract must be signed by both parties before it can be emailed.",
@@ -118,12 +115,21 @@ async def email_contract_endpoint(
         recipient_name = contract.contractor_name
 
     try:
-        pdf_content = render_contract_pdf(contract)
+        pdf_content = await asyncio.to_thread(
+            render_contract_pdf,
+            contract,
+        )
     except Exception:
-        return {
-            "message": "The contract is ready, but PDF generation is currently unavailable."
-        }
+        logger.exception(
+            "Failed to render PDF for contract %s",
+            contract.id,
+        )
 
+        return ContractEmailResponse(
+            message=(
+                "The contract is ready, but PDF generation " "is currently unavailable."
+            )
+        )
     try:
         await asyncio.to_thread(
             send_contract_email,
@@ -143,7 +149,7 @@ async def email_contract_endpoint(
         )
     except ContractEmailError as exc:
         raise HTTPException(
-            status_code=503,
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={
                 "code": "email_delivery_failed",
                 "message": str(exc),

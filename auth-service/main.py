@@ -1,4 +1,5 @@
 import os
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 import uvicorn
@@ -13,16 +14,22 @@ load_dotenv()
 
 def get_allowed_origins() -> list[str]:
     raw_origins = os.getenv("ALLOWED_ORIGINS", "")
-    return [origin.strip() for origin in raw_origins.split(",")]
+
+    return [origin.strip() for origin in raw_origins.split(",") if origin.strip()]
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(
+    _app: FastAPI,
+) -> AsyncGenerator[None, None]:
     init_db()
     yield
 
 
-app = FastAPI(title="Auth Service", lifespan=lifespan)
+app = FastAPI(
+    title="Auth Service",
+    lifespan=lifespan,
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -32,7 +39,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(auth_router, prefix="/auth")
+app.include_router(
+    auth_router,
+    prefix="/auth",
+)
+
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="localhost", port=8000, reload=True)
+    uvicorn.run(
+        "main:app",
+        host="localhost",
+        port=8000,
+        reload=True,
+    )
