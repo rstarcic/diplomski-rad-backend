@@ -1,10 +1,6 @@
 import os
 
 import stripe
-from fastapi import APIRouter, Depends, Header, Query, Request, status
-from sqlalchemy import select
-from sqlalchemy.orm import Session
-
 from app.dependencies import get_current_user, get_current_user_id
 from app.integrations.stripe_client import stripe_client
 from app.models import JobPayment, PaymentProfile
@@ -28,6 +24,9 @@ from app.payments.service import (
 )
 from database import get_db
 from errors import raise_payment_error
+from fastapi import APIRouter, Depends, Header, Query, Request, status
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/payments", tags=["payments"])
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
@@ -179,8 +178,7 @@ async def stripe_webhook_endpoint(
         if payment_intent_id:
             return db.scalars(
                 select(JobPayment).where(
-                    JobPayment.stripe_payment_intent_id
-                    == payment_intent_id
+                    JobPayment.stripe_payment_intent_id == payment_intent_id
                 )
             ).first()
 
@@ -195,10 +193,7 @@ async def stripe_webhook_endpoint(
         if amount is not None and amount != payment.amount_minor:
             raise_payment_error("payment_amount_mismatch")
 
-        if (
-            currency
-            and currency.lower() != payment.currency.lower()
-        ):
+        if currency and currency.lower() != payment.currency.lower():
             raise_payment_error("payment_amount_mismatch")
 
     def clear_payment_method(profile: PaymentProfile) -> None:
@@ -257,10 +252,7 @@ async def stripe_webhook_endpoint(
             if profile is None:
                 raise_payment_error("invalid_webhook_payload")
 
-            if (
-                session.customer
-                and profile.stripe_customer_id != str(session.customer)
-            ):
+            if session.customer and profile.stripe_customer_id != str(session.customer):
                 raise_payment_error("invalid_webhook_payload")
 
             if event_type == "checkout.session.expired":
@@ -269,9 +261,7 @@ async def stripe_webhook_endpoint(
                 return {"received": True}
 
             setup_intent_id = (
-                str(session.setup_intent)
-                if session.setup_intent
-                else None
+                str(session.setup_intent) if session.setup_intent else None
             )
 
             if not setup_intent_id:
@@ -279,9 +269,7 @@ async def stripe_webhook_endpoint(
                 commit()
                 return {"received": True}
 
-            setup_intent = stripe_client.v1.setup_intents.retrieve(
-                setup_intent_id
-            )
+            setup_intent = stripe_client.v1.setup_intents.retrieve(setup_intent_id)
 
             if setup_intent.status != "succeeded":
                 profile.payment_setup_completed = False
@@ -291,10 +279,8 @@ async def stripe_webhook_endpoint(
             payment_method_data = None
 
             if setup_intent.payment_method:
-                payment_method = (
-                    stripe_client.v1.payment_methods.retrieve(
-                        str(setup_intent.payment_method)
-                    )
+                payment_method = stripe_client.v1.payment_methods.retrieve(
+                    str(setup_intent.payment_method)
                 )
 
                 card = getattr(payment_method, "card", None)
@@ -335,15 +321,9 @@ async def stripe_webhook_endpoint(
 
         if session.mode == "payment":
             try:
-                payment_id = int(
-                    metadata_value(metadata, "payment_id")
-                )
-                contract_id = int(
-                    metadata_value(metadata, "contract_id")
-                )
-                application_id = int(
-                    metadata_value(metadata, "application_id")
-                )
+                payment_id = int(metadata_value(metadata, "payment_id"))
+                contract_id = int(metadata_value(metadata, "contract_id"))
+                application_id = int(metadata_value(metadata, "application_id"))
             except (TypeError, ValueError):
                 raise_payment_error("invalid_webhook_payload")
 
@@ -366,19 +346,15 @@ async def stripe_webhook_endpoint(
             )
 
             if session.payment_intent:
-                payment.stripe_payment_intent_id = str(
-                    session.payment_intent
-                )
+                payment.stripe_payment_intent_id = str(session.payment_intent)
 
             if event_type in {
                 "checkout.session.completed",
                 "checkout.session.async_payment_succeeded",
             }:
-                # Za async metode completed može doći dok je još unpaid.
+
                 payment.status = (
-                    "paid"
-                    if session.payment_status == "paid"
-                    else "pending"
+                    "paid" if session.payment_status == "paid" else "pending"
                 )
 
             elif event_type == "checkout.session.async_payment_failed":
@@ -449,8 +425,7 @@ async def stripe_webhook_endpoint(
 
         profile = db.scalars(
             select(PaymentProfile).where(
-                PaymentProfile.stripe_customer_id
-                == str(setup_intent.customer)
+                PaymentProfile.stripe_customer_id == str(setup_intent.customer)
             )
         ).first()
 
@@ -461,10 +436,8 @@ async def stripe_webhook_endpoint(
             payment_method = None
 
             if setup_intent.payment_method:
-                payment_method = (
-                    stripe_client.v1.payment_methods.retrieve(
-                        str(setup_intent.payment_method)
-                    )
+                payment_method = stripe_client.v1.payment_methods.retrieve(
+                    str(setup_intent.payment_method)
                 )
 
             profile.payment_setup_completed = True
