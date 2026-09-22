@@ -14,8 +14,6 @@
 
 Ovaj repozitorij sadržava izvorni kod poslužiteljskog sloja sustava **WorkLink**, razvijenog kao praktični dio diplomskog rada pod naslovom *Razvoj mikroservisne web-aplikacije za upravljanje poslovnim angažmanima i digitalnim ugovorima*.
 
-Izvorni kod korisničkog sloja dostupan je u zasebnom [GitHub repozitoriju](https://github.com/rstarcic/diplomski-rad-frontend).
-
 ## Sažetak
 
 Najveći izazov digitalnog posredovanja nije pronaći poslovnog partnera, nego sigurno i dosljedno upravljati svime što slijedi nakon njihova povezivanja. Objavljivanje oglasa i podnošenje prijave tek su početak procesa koji obuhvaća pregovaranje, prihvaćanje uvjeta, sklapanje ugovora, praćenje izvršenja, plaćanje i izgradnju povjerenja između korisnika.
